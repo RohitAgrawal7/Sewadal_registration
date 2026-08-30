@@ -127,7 +127,7 @@ export function AttendanceClient({
     for (const row of livePresent) {
       byId.set(row.memberId, { ...byId.get(row.memberId), ...row });
     }
-    return [...byId.values()];
+    return Array.from(byId.values());
   }, [dayData.rows, livePresent]);
 
   function addPresentToList(row: MemberAttendanceRow) {

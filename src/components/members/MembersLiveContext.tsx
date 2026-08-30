@@ -37,7 +37,7 @@ function mergeById(
 ): MemberWithDerived[] {
   const byId = new Map(current.map((m) => [m.id, m]));
   for (const m of incoming) byId.set(m.id, m);
-  return [...byId.values()].sort((a, b) => a.fullName.localeCompare(b.fullName));
+  return Array.from(byId.values()).sort((a, b) => a.fullName.localeCompare(b.fullName));
 }
 
 export function MembersLiveProvider({
