@@ -1,0 +1,82 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "darwin-arm64"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Member {
+  id                    String   @id @default(uuid())
+  fullName              String
+  preferredName         String?
+  gender                String?
+  dateOfBirth           DateTime
+  nationalIdType        String
+  nationalIdNumber      String?
+  photoUrl              String?
+
+  email                 String   @unique
+  phonePrimary          String
+  phoneSecondary        String?
+  address               String
+  city                  String
+  stateRegion           String
+  postalCode            String?
+  country               String
+  emergencyContactName  String?
+  emergencyContactPhone String?
+
+  unit                  String
+  unitAssignedDate      DateTime
+  role                  String?
+  unitHistory           UnitAssignmentLog[]
+  attendance            AttendanceRecord[]
+
+  registrationDate      DateTime
+  membershipStatus      String   @default("Active")
+  statusEffectiveDate   DateTime
+  lastRenewalDate       DateTime?
+  notes                 String?
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model UnitAssignmentLog {
+  id        String    @id @default(uuid())
+  memberId  String
+  member    Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  unit      String
+  startDate DateTime
+  endDate   DateTime?
+
+  @@index([memberId])
+}
+
+model AttendanceRecord {
+  id        String   @id @default(uuid())
+  memberId  String
+  member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  date      DateTime
+  status    String
+  notes     String?
+  markedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([memberId, date])
+  @@index([date])
+  @@index([memberId])
+}
+
+model AttendanceSession {
+  id            String   @id @default(uuid())
+  date          DateTime @unique
+  topic         String?
+  sanchalanSewa String?
+  stageSewa     String?
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+}

@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --unit-1: #2563eb;
+  --unit-2: #16a34a;
+  --unit-3: #9333ea;
+  --unit-4: #ea580c;
+  --birthday-today: #f59e0b;
+  --surface: #f1f5f9;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --muted: #64748b;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  color: var(--text);
+  background-color: var(--surface);
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgb(254 243 199 / 0.55) 0%, transparent 55%),
+    radial-gradient(ellipse 55% 40% at 100% 0%, rgb(224 231 255 / 0.5) 0%, transparent 45%),
+    radial-gradient(ellipse 45% 35% at 0% 100%, rgb(224 242 254 / 0.4) 0%, transparent 50%),
+    radial-gradient(rgb(148 163 184 / 0.22) 0.8px, transparent 0.8px),
+    linear-gradient(rgb(148 163 184 / 0.09) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(148 163 184 / 0.09) 1px, transparent 1px);
+  background-size:
+    auto,
+    auto,
+    auto,
+    18px 18px,
+    36px 36px,
+    36px 36px;
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 999px;
+  }
+}
