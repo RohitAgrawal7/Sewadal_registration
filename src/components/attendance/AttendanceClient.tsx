@@ -17,7 +17,7 @@ import {
 import { AttendancePdfPreview } from "./AttendancePdfPreview";
 import { formatPaRate } from "@/lib/attendance/stats";
 import { dateKey } from "@/lib/attendance/date-utils";
-import { ALL_UNITS, UNIT_COLORS, UNIT_LABELS } from "@/lib/unit-colors";
+import { ALL_UNITS, UNIT_LABELS, unitChipStyle } from "@/lib/unit-colors";
 import { orgSettings } from "@/lib/org-settings";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -172,27 +172,25 @@ export function AttendanceClient({
   );
 
   function previewRangePdf() {
-    setPdfPreview(
-      attendancePdfFile({
-        kind: "range",
-        fromKey: rangeData.fromKey,
-        toKey: rangeData.toKey,
-        unitFilter: unit,
-        sessionCount: rangeData.sessionCount,
-        memberCount: rangeData.memberCount,
-        overall: rangeData.overall,
-        byUnit: rangeData.byUnit,
-        memberStats: rangeData.memberStats.map((m) => ({
-          fullName: m.fullName,
-          unit: m.unit,
-          gender: m.gender,
-          sessions: m.sessions,
-          attended: m.attended,
-          absentCount: m.absentCount,
-          rate: m.rate,
-        })),
-      })
-    );
+    void attendancePdfFile({
+      kind: "range",
+      fromKey: rangeData.fromKey,
+      toKey: rangeData.toKey,
+      unitFilter: unit,
+      sessionCount: rangeData.sessionCount,
+      memberCount: rangeData.memberCount,
+      overall: rangeData.overall,
+      byUnit: rangeData.byUnit,
+      memberStats: rangeData.memberStats.map((m) => ({
+        fullName: m.fullName,
+        unit: m.unit,
+        gender: m.gender,
+        sessions: m.sessions,
+        attended: m.attended,
+        absentCount: m.absentCount,
+        rate: m.rate,
+      })),
+    }).then(setPdfPreview);
   }
 
   return (
@@ -225,19 +223,14 @@ export function AttendanceClient({
           All units
         </button>
         {ALL_UNITS.map((u) => {
-          const colors = UNIT_COLORS[u];
           const active = unit === u;
           return (
             <button
               key={u}
               type="button"
               onClick={() => pushParams({ unit: u })}
-              className={cn(
-                "rounded-full border px-3 py-1.5 text-sm font-semibold transition",
-                active
-                  ? `${colors.pill}`
-                  : `${colors.soft} ${colors.text} ${colors.border} hover:brightness-95`
-              )}
+              style={unitChipStyle(u, active)}
+              className="rounded-full border-2 px-3 py-1.5 text-sm font-semibold transition"
             >
               {UNIT_LABELS[u]}
             </button>

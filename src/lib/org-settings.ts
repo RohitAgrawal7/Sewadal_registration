@@ -1,9 +1,12 @@
 export const orgSettings = {
-  defaultCountry: "Kenya",
+  defaultCountry: "India",
+  defaultState: "Maharashtra",
   minimumAge: 16,
   orgName: "Member Registry",
   locationName: "Chhatrapati Sambhaji Nagar",
   locationSlug: "chhatrapati-sambhaji-nagar",
+  khetra: "Chhatrapati Sambhaji Nagar",
+  zone: "Maharashtra",
 } as const;
 
 export function listsLocationPath() {

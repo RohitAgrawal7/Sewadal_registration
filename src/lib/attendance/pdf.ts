@@ -1,7 +1,6 @@
 "use client";
 
-import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
+import type { jsPDF } from "jspdf";
 import { format, parseISO } from "date-fns";
 import { orgSettings } from "@/lib/org-settings";
 import { UNIT_LABELS } from "@/lib/unit-colors";
@@ -106,7 +105,16 @@ function lastY(doc: jsPDF) {
     .finalY;
 }
 
-export function buildAttendancePdf(data: AttendancePdfData) {
+async function loadPdf() {
+  const [{ jsPDF }, autoTableMod] = await Promise.all([
+    import("jspdf"),
+    import("jspdf-autotable"),
+  ]);
+  return { jsPDF, autoTable: autoTableMod.default };
+}
+
+export async function buildAttendancePdf(data: AttendancePdfData) {
+  const { jsPDF, autoTable } = await loadPdf();
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const margin = 14;
   let y = 16;
@@ -287,8 +295,10 @@ export function buildAttendancePdf(data: AttendancePdfData) {
   };
 }
 
-export function attendancePdfFile(data: AttendancePdfData): AttendancePdfFile {
-  const { doc, filename } = buildAttendancePdf(data);
+export async function attendancePdfFile(
+  data: AttendancePdfData
+): Promise<AttendancePdfFile> {
+  const { doc, filename } = await buildAttendancePdf(data);
   const blob = doc.output("blob");
   return {
     blob,
@@ -297,8 +307,8 @@ export function attendancePdfFile(data: AttendancePdfData): AttendancePdfFile {
   };
 }
 
-export function downloadAttendancePdf(data: AttendancePdfData) {
-  const { doc, filename } = buildAttendancePdf(data);
+export async function downloadAttendancePdf(data: AttendancePdfData) {
+  const { doc, filename } = await buildAttendancePdf(data);
   doc.save(filename);
 }
 

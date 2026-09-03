@@ -5,7 +5,6 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { useRouter } from "next/navigation";
 import type { Member } from "@prisma/client";
 import type { Unit } from "@/lib/enums";
-import { UNIT_LABELS } from "@/lib/unit-colors";
 import { MemberForm } from "@/components/members/MemberForm";
 import { Button } from "@/components/ui/Button";
 import { useOptionalMembersLive } from "@/components/members/MembersLiveContext";
@@ -23,7 +22,7 @@ export function AddMemberButton({
   return (
     <>
       <Button type="button" onClick={() => setOpen(true)}>
-        Add member
+        Add sewadaar
       </Button>
       <Dialog.Root
         open={open}
@@ -38,17 +37,11 @@ export function AddMemberButton({
             data-scroll-form
             className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[min(100%-1.5rem,52rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl bg-slate-50 p-4 shadow-xl sm:p-6"
           >
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <Dialog.Title className="text-xl font-bold text-slate-900">
-                  Add member
-                  {defaultUnit ? ` · ${UNIT_LABELS[defaultUnit]}` : ""}
-                </Dialog.Title>
-                <Dialog.Description className="mt-1 text-sm text-slate-500">
-                  Submit to add this person. The form stays open and clears so
-                  you can add the next member.
-                </Dialog.Description>
-              </div>
+            <div className="mb-3 flex justify-end">
+              <Dialog.Title className="sr-only">New Sewadaar</Dialog.Title>
+              <Dialog.Description className="sr-only">
+                Register a new sewadaar. The form stays open after submit.
+              </Dialog.Description>
               <Dialog.Close asChild>
                 <Button type="button" variant="outline" size="sm">
                   Close

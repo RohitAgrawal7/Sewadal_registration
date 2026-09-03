@@ -5,9 +5,10 @@ import { formatBirthdayChip } from "@/lib/dates";
 import type { MemberWithDerived } from "@/lib/dates";
 import type { Member, UnitAssignmentLog } from "@prisma/client";
 import { Avatar } from "@/components/ui/Avatar";
+import { Button } from "@/components/ui/Button";
 import { UnitBadge } from "@/components/ui/UnitBadge";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Button } from "@/components/ui/Button";
+import { SEWA_ROLE_LABELS, normalizeSewaRole } from "@/lib/sewadaar";
 
 type MemberDetail = MemberWithDerived<
   Member & { unitHistory?: UnitAssignmentLog[] }
@@ -37,14 +38,19 @@ export function MemberProfileHeader({
             </h1>
             <UnitBadge unit={member.unit} />
             <StatusBadge status={member.membershipStatus} />
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
+              {SEWA_ROLE_LABELS[normalizeSewaRole(member.sewaRole)]}
+            </span>
           </div>
-          {member.preferredName && (
+          {member.fatherHusbandName && (
             <p className="mt-0.5 text-sm text-slate-500">
-              Prefers “{member.preferredName}”
+              S/O or H/O {member.fatherHusbandName}
             </p>
           )}
-          {member.role && (
-            <p className="mt-0.5 text-sm text-slate-600">{member.role}</p>
+          {(member.profession || member.role) && (
+            <p className="mt-0.5 text-sm text-slate-600">
+              {member.profession || member.role}
+            </p>
           )}
           <p className="mt-3 inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-sm text-amber-900">
             {formatBirthdayChip(member)}

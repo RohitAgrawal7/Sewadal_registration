@@ -16,6 +16,51 @@ function emptyToNull(value: string | undefined | null): string | null {
   return value;
 }
 
+type MemberWriteData = ReturnType<typeof toMemberData>;
+
+function splitMemberWrite(data: MemberWriteData) {
+  const {
+    sewaRole,
+    fatherHusbandName,
+    qualification,
+    profession,
+    skills,
+    bloodGroup,
+    identityDocUrl,
+    ...core
+  } = data;
+  return {
+    core,
+    extra: {
+      sewaRole,
+      fatherHusbandName,
+      qualification,
+      profession,
+      skills,
+      bloodGroup,
+      identityDocUrl,
+    },
+  };
+}
+
+async function applySewadaarColumns(
+  id: string,
+  extra: ReturnType<typeof splitMemberWrite>["extra"]
+) {
+  // Written with SQL so a stale webpack Prisma client (missing sewaRole) still saves.
+  await prisma.$executeRaw`
+    UPDATE Member
+    SET sewaRole = ${extra.sewaRole},
+        fatherHusbandName = ${extra.fatherHusbandName},
+        qualification = ${extra.qualification},
+        profession = ${extra.profession},
+        skills = ${extra.skills},
+        bloodGroup = ${extra.bloodGroup},
+        identityDocUrl = ${extra.identityDocUrl}
+    WHERE id = ${id}
+  `;
+}
+
 function toMemberData(values: MemberFormValues) {
   return {
     fullName: values.fullName.trim(),
@@ -38,6 +83,7 @@ function toMemberData(values: MemberFormValues) {
     unit: values.unit,
     unitAssignedDate: parseDateInput(values.unitAssignedDate),
     role: emptyToNull(values.role),
+    sewaRole: values.sewaRole,
     registrationDate: parseDateInput(values.registrationDate),
     membershipStatus: values.membershipStatus,
     statusEffectiveDate: parseDateInput(values.statusEffectiveDate),
@@ -45,6 +91,12 @@ function toMemberData(values: MemberFormValues) {
       ? parseDateInput(values.lastRenewalDate)
       : null,
     notes: emptyToNull(values.notes),
+    fatherHusbandName: emptyToNull(values.fatherHusbandName),
+    qualification: emptyToNull(values.qualification),
+    profession: emptyToNull(values.profession),
+    skills: emptyToNull(values.skills),
+    bloodGroup: emptyToNull(values.bloodGroup),
+    identityDocUrl: emptyToNull(values.identityDocUrl),
   };
 }
 
@@ -70,11 +122,18 @@ export type CreatedMemberPayload = {
   unit: string;
   unitAssignedDate: Date;
   role: string | null;
+  sewaRole: string;
   registrationDate: Date;
   membershipStatus: string;
   statusEffectiveDate: Date;
   lastRenewalDate: Date | null;
   notes: string | null;
+  fatherHusbandName: string | null;
+  qualification: string | null;
+  profession: string | null;
+  skills: string | null;
+  bloodGroup: string | null;
+  identityDocUrl: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -82,6 +141,23 @@ export type CreatedMemberPayload = {
 export type ActionResult =
   | { success: true; id: string; member?: CreatedMemberPayload }
   | { success: false; error: string };
+
+function memberWriteError(e: unknown, fallback: string): string {
+  if (e && typeof e === "object" && "code" in e && e.code === "P2002") {
+    return "A member with this email already exists";
+  }
+  const message =
+    e && typeof e === "object" && "message" in e && typeof e.message === "string"
+      ? e.message
+      : "";
+  if (/no such table/i.test(message)) {
+    return "Database is not connected. Restart the app and try again.";
+  }
+  if (/Unknown arg/i.test(message)) {
+    return "Database is out of date. Restart the app and try again.";
+  }
+  return fallback;
+}
 
 function revalidateMemberCaches(memberId?: string) {
   revalidatePath("/", "layout");
@@ -103,11 +179,12 @@ export async function createMember(
   }
 
   const data = toMemberData(parsed.data);
+  const { core, extra } = splitMemberWrite(data);
 
   try {
     const member = await prisma.member.create({
       data: {
-        ...data,
+        ...core,
         unitHistory: {
           create: {
             unit: data.unit,
@@ -117,15 +194,17 @@ export async function createMember(
         },
       },
     });
+    await applySewadaarColumns(member.id, extra);
 
     revalidateMemberCaches(member.id);
-    return { success: true, id: member.id, member };
+    return {
+      success: true,
+      id: member.id,
+      member: { ...member, ...extra },
+    };
   } catch (e: unknown) {
-    const message =
-      e && typeof e === "object" && "code" in e && e.code === "P2002"
-        ? "A member with this email already exists"
-        : "Failed to create member";
-    return { success: false, error: message };
+    console.error("createMember failed", e);
+    return { success: false, error: memberWriteError(e, "Failed to create member") };
   }
 }
 
@@ -146,6 +225,7 @@ export async function updateMember(
   if (!existing) return { success: false, error: "Member not found" };
 
   const data = toMemberData(parsed.data);
+  const { core, extra } = splitMemberWrite(data);
   const unitChanged = existing.unit !== data.unit;
 
   if (unitChanged && !options?.confirmUnitChange) {
@@ -179,22 +259,20 @@ export async function updateMember(
       await tx.member.update({
         where: { id },
         data: {
-          ...data,
+          ...core,
           unitAssignedDate: unitChanged
             ? data.unitAssignedDate
             : existing.unitAssignedDate,
         },
       });
     });
+    await applySewadaarColumns(id, extra);
 
     revalidateMemberCaches(id);
     return { success: true, id };
   } catch (e: unknown) {
-    const message =
-      e && typeof e === "object" && "code" in e && e.code === "P2002"
-        ? "A member with this email already exists"
-        : "Failed to update member";
-    return { success: false, error: message };
+    console.error("updateMember failed", e);
+    return { success: false, error: memberWriteError(e, "Failed to update member") };
   }
 }
 

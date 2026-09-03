@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
@@ -8,29 +8,32 @@ import { toast } from "sonner";
 import {
   memberFormSchema,
   type MemberFormValues,
-  GENDER_LABELS,
-  ID_TYPE_LABELS,
-  STATUS_LABELS,
 } from "@/lib/validations/member";
 import {
   GENDERS,
-  MEMBERSHIP_STATUSES,
-  NATIONAL_ID_TYPES,
   MembershipStatus,
   type Unit,
 } from "@/lib/enums";
-import { ALL_UNITS, UNIT_COLORS, UNIT_LABELS } from "@/lib/unit-colors";
+import { ALL_UNITS, UNIT_LABELS, unitChipStyle } from "@/lib/unit-colors";
 import { orgSettings } from "@/lib/org-settings";
 import { computeAge } from "@/lib/dates";
 import { cn, formatDateInput, parseDateInput } from "@/lib/utils";
 import { createMember, updateMember } from "@/lib/members/actions";
-import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { Button } from "@/components/ui/Button";
-import { Avatar } from "@/components/ui/Avatar";
 import { UnitReassignDialog } from "@/components/members/UnitReassignDialog";
+import {
+  BLOOD_GROUPS,
+  QUALIFICATIONS,
+  SEWA_ROLES,
+  SEWA_ROLE_LABELS,
+  SKILL_OPTIONS,
+  TYPE_LABELS,
+  joinSkills,
+  parseSkills,
+} from "@/lib/sewadaar";
 
 function todayIso() {
   return formatDateInput(new Date());
@@ -39,6 +42,7 @@ function todayIso() {
 function emptyMemberValues(
   overrides?: Partial<MemberFormValues>
 ): MemberFormValues {
+  const today = todayIso();
   return {
     fullName: "",
     preferredName: "",
@@ -51,41 +55,58 @@ function emptyMemberValues(
     phonePrimary: "",
     phoneSecondary: "",
     address: "",
-    city: "",
-    stateRegion: "",
+    city: orgSettings.locationName,
+    stateRegion: orgSettings.defaultState,
     postalCode: "",
     country: orgSettings.defaultCountry,
     emergencyContactName: "",
     emergencyContactPhone: "",
     unit: "Unit1",
-    unitAssignedDate: todayIso(),
+    unitAssignedDate: today,
     role: "",
-    registrationDate: todayIso(),
+    sewaRole: "Sewadal",
+    registrationDate: today,
     membershipStatus: MembershipStatus.Active,
-    statusEffectiveDate: todayIso(),
+    statusEffectiveDate: today,
     lastRenewalDate: "",
     notes: "",
+    fatherHusbandName: "",
+    qualification: "",
+    profession: "",
+    skills: "",
+    bloodGroup: "",
+    identityDocUrl: "",
     ...overrides,
   };
 }
 
-function SectionCard({
-  title,
-  helper,
+function FormRow({
+  label,
+  required,
+  error,
+  hint,
   children,
 }: {
-  title: string;
-  helper: string;
+  label: string;
+  required?: boolean;
+  error?: string;
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-      <div className="mb-5 border-b border-slate-100 pb-4">
-        <h2 className="text-base font-semibold text-slate-900">{title}</h2>
-        <p className="mt-1 text-sm text-slate-500">{helper}</p>
+    <div className="grid grid-cols-1 items-start gap-1.5 sm:grid-cols-[11.5rem_minmax(0,28rem)] sm:gap-x-4">
+      <span className="pt-2 text-sm font-medium text-slate-700 sm:text-right">
+        {label}
+        {required ? <span className="text-red-500"> *</span> : null}
+      </span>
+      <div className="min-w-0">
+        {children}
+        {hint && !error ? (
+          <p className="mt-1 text-xs text-slate-500">{hint}</p>
+        ) : null}
+        {error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null}
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">{children}</div>
-    </section>
+    </div>
   );
 }
 
@@ -118,10 +139,13 @@ export function MemberForm({
 }) {
   const router = useRouter();
   const [uploading, setUploading] = useState(false);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [skillQuery, setSkillQuery] = useState("");
   const [pendingUnit, setPendingUnit] = useState<Unit | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<MemberFormValues>({
     resolver: zodResolver(memberFormSchema),
@@ -140,9 +164,11 @@ export function MemberForm({
   } = form;
 
   const dob = watch("dateOfBirth");
-  const photoUrl = watch("photoUrl");
   const fullName = watch("fullName");
   const currentUnit = watch("unit");
+  const identityDocUrl = watch("identityDocUrl");
+  const photoUrl = watch("photoUrl");
+  const selectedSkills = parseSkills(watch("skills"));
   const originalUnit = defaultValues?.unit;
 
   const liveAge = useMemo(() => {
@@ -154,31 +180,42 @@ export function MemberForm({
     }
   }, [dob]);
 
-  const ageWarning = useMemo(() => {
-    if (liveAge === null) return null;
-    if (liveAge < orgSettings.minimumAge) {
-      return `Age ${liveAge} is below the usual minimum (${orgSettings.minimumAge}). You can still submit if this is an approved exception.`;
-    }
-    return null;
-  }, [liveAge]);
+  const visibleSkills = useMemo(() => {
+    const q = skillQuery.trim().toLowerCase();
+    if (!q) return SKILL_OPTIONS;
+    return SKILL_OPTIONS.filter((s) => s.toLowerCase().includes(q));
+  }, [skillQuery]);
 
-  useEffect(() => {
-    if (dob) {
-      try {
-        const d = parseDateInput(dob);
-        if (d > new Date()) {
-          form.setError("dateOfBirth", {
-            type: "manual",
-            message: "Date of birth cannot be in the future",
-          });
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-  }, [dob, form]);
+  function toggleSkill(skill: string) {
+    const next = selectedSkills.includes(skill)
+      ? selectedSkills.filter((s) => s !== skill)
+      : [...selectedSkills, skill];
+    setValue("skills", joinSkills(next), { shouldValidate: true, shouldDirty: true });
+  }
 
   async function uploadPhoto(file: File) {
+    if (!file.type.startsWith("image/")) {
+      toast.error("Profile photo must be an image");
+      return;
+    }
+    setPhotoUploading(true);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/uploads", { method: "POST", body });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      const url = data.photoUrl || data.url;
+      setValue("photoUrl", url, { shouldValidate: true, shouldDirty: true });
+      toast.success("Profile photo added");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setPhotoUploading(false);
+    }
+  }
+
+  async function uploadIdentity(file: File) {
     setUploading(true);
     try {
       const body = new FormData();
@@ -186,8 +223,9 @@ export function MemberForm({
       const res = await fetch("/api/uploads", { method: "POST", body });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
-      setValue("photoUrl", data.photoUrl, { shouldValidate: true });
-      toast.success("Photo uploaded");
+      const url = data.url || data.photoUrl;
+      setValue("identityDocUrl", url, { shouldValidate: true, shouldDirty: true });
+      toast.success("Document uploaded");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Upload failed");
     } finally {
@@ -207,15 +245,22 @@ export function MemberForm({
       return;
     }
 
+    const payload: MemberFormValues = {
+      ...values,
+      unitAssignedDate: values.registrationDate,
+      statusEffectiveDate: values.statusEffectiveDate || values.registrationDate,
+      role: values.role || values.profession,
+    };
+
     setSubmitting(true);
     try {
       if (mode === "create") {
-        const result = await createMember(values);
+        const result = await createMember(payload);
         if (!result.success) {
           toast.error(result.error);
           return;
         }
-        toast.success("Member added", {
+        toast.success("Sewadaar added", {
           description: `${values.fullName} · ${UNIT_LABELS[values.unit]}`,
         });
         reset(emptyMemberValues(defaultValues), {
@@ -225,6 +270,7 @@ export function MemberForm({
           keepIsValid: false,
           keepTouched: false,
         });
+        setSkillQuery("");
         const scroller = formRef.current?.closest("[data-scroll-form]");
         if (scroller instanceof HTMLElement) {
           scroller.scrollTo({ top: 0, behavior: "smooth" });
@@ -234,7 +280,7 @@ export function MemberForm({
       }
 
       if (!memberId) return;
-      const result = await updateMember(memberId, values, {
+      const result = await updateMember(memberId, payload, {
         confirmUnitChange: confirmUnit || values.unit === originalUnit,
       });
       if (!result.success) {
@@ -246,7 +292,7 @@ export function MemberForm({
         toast.error(result.error);
         return;
       }
-      toast.success("Member updated");
+      toast.success("Sewadaar updated");
       router.push(returnTo || `/members/${memberId}`);
       router.refresh();
     } finally {
@@ -261,156 +307,35 @@ export function MemberForm({
       <form
         ref={formRef}
         onSubmit={handleSubmit((v) => onSubmit(v, false))}
-        className="space-y-6"
+        className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
       >
-        <SectionCard
-          title="A — Biodata"
-          helper="Identity details used across the registry and birthday spotlight."
-        >
-          <Field
-            label="Full name"
-            required
-            error={errors.fullName?.message}
-            className="sm:col-span-2"
-          >
-            <Input {...register("fullName")} error={!!errors.fullName} />
-          </Field>
-          <Field label="Preferred name" error={errors.preferredName?.message}>
-            <Input {...register("preferredName")} />
-          </Field>
-          <Field label="Gender" error={errors.gender?.message}>
-            <Select {...register("gender")}>
-              <option value="">— Select —</option>
-              {GENDERS.map((g) => (
-                <option key={g} value={g}>
-                  {GENDER_LABELS[g]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field
-            label="Date of birth"
-            required
-            error={errors.dateOfBirth?.message}
-            hint={
-              liveAge !== null
-                ? `Age: ${liveAge}${ageWarning ? "" : ""}`
-                : undefined
-            }
-          >
-            <Input
-              type="date"
-              {...register("dateOfBirth")}
-              error={!!errors.dateOfBirth}
-              max={todayIso()}
-            />
-          </Field>
-          {ageWarning && (
-            <p className="sm:col-span-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              {ageWarning}
-            </p>
-          )}
-          <Field label="Photo" className="sm:col-span-2">
-            <div className="flex items-center gap-4">
-              <Avatar photoUrl={photoUrl} name={fullName || "Member"} size="lg" />
-              <div className="flex flex-col gap-2">
-                <input
-                  type="file"
-                  accept="image/*"
-                  disabled={uploading}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) void uploadPhoto(file);
-                  }}
-                  className="text-sm"
-                />
-                <input type="hidden" {...register("photoUrl")} />
-                {uploading && (
-                  <span className="text-xs text-slate-500">Uploading…</span>
-                )}
-              </div>
+        <div className="border-b border-slate-200 bg-slate-50 px-5 py-4 sm:px-7">
+          <h2 className="text-xl font-bold text-slate-900 sm:text-2xl">
+            {mode === "create" ? "New Sewadaar" : "Edit Sewadaar"}
+          </h2>
+          <dl className="mt-3 grid gap-1 text-sm text-slate-600 sm:grid-cols-3">
+            <div>
+              <dt className="inline font-medium text-slate-500">Unit: </dt>
+              <dd className="inline">{UNIT_LABELS[currentUnit]}</dd>
             </div>
-          </Field>
-          <Field label="ID type" required error={errors.nationalIdType?.message}>
-            <Select {...register("nationalIdType")} error={!!errors.nationalIdType}>
-              {NATIONAL_ID_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {ID_TYPE_LABELS[t]}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="ID number" error={errors.nationalIdNumber?.message}>
-            <Input {...register("nationalIdNumber")} />
-          </Field>
-        </SectionCard>
+            <div>
+              <dt className="inline font-medium text-slate-500">Khetra: </dt>
+              <dd className="inline">{orgSettings.khetra}</dd>
+            </div>
+            <div>
+              <dt className="inline font-medium text-slate-500">Zone: </dt>
+              <dd className="inline">{orgSettings.zone}</dd>
+            </div>
+          </dl>
+        </div>
 
-        <SectionCard
-          title="B — Contact information"
-          helper="Primary contact channels and emergency details."
-        >
-          <Field label="Email" required error={errors.email?.message}>
-            <Input type="email" {...register("email")} error={!!errors.email} />
-          </Field>
-          <Field
-            label="Phone (primary)"
+        <div className="flex flex-col gap-6 px-5 py-5 sm:px-7 sm:py-6 lg:flex-row lg:items-start">
+          <div className="min-w-0 flex-1 space-y-4">
+          <FormRow
+            label="Unit"
             required
-            error={errors.phonePrimary?.message}
+            error={errors.unit?.message}
           >
-            <Input {...register("phonePrimary")} error={!!errors.phonePrimary} />
-          </Field>
-          <Field
-            label="Phone (secondary)"
-            error={errors.phoneSecondary?.message}
-          >
-            <Input {...register("phoneSecondary")} />
-          </Field>
-          <Field
-            label="Address"
-            required
-            error={errors.address?.message}
-            className="sm:col-span-2"
-          >
-            <Input {...register("address")} error={!!errors.address} />
-          </Field>
-          <Field label="City" required error={errors.city?.message}>
-            <Input {...register("city")} error={!!errors.city} />
-          </Field>
-          <Field
-            label="State / Region"
-            required
-            error={errors.stateRegion?.message}
-          >
-            <Input {...register("stateRegion")} error={!!errors.stateRegion} />
-          </Field>
-          <Field label="Postal code" error={errors.postalCode?.message}>
-            <Input {...register("postalCode")} />
-          </Field>
-          <Field label="Country" required error={errors.country?.message}>
-            <Input {...register("country")} error={!!errors.country} />
-          </Field>
-          <Field
-            label="Emergency contact name"
-            error={errors.emergencyContactName?.message}
-          >
-            <Input {...register("emergencyContactName")} />
-          </Field>
-          <Field
-            label="Emergency contact phone"
-            error={errors.emergencyContactPhone?.message}
-          >
-            <Input {...register("emergencyContactPhone")} />
-          </Field>
-        </SectionCard>
-
-        <SectionCard
-          title="C — Unit assignment"
-          helper="Pick a unit visually — reassignment on edit is logged for tenure."
-        >
-          <div className="sm:col-span-2">
-            <p className="mb-2 text-sm font-medium text-slate-700">
-              Unit<span className="ml-0.5 text-red-500">*</span>
-            </p>
             <Controller
               control={control}
               name="unit"
@@ -418,7 +343,6 @@ export function MemberForm({
                 <div className="flex flex-wrap gap-2">
                   {ALL_UNITS.map((u) => {
                     const selected = field.value === u;
-                    const colors = UNIT_COLORS[u];
                     return (
                       <button
                         key={u}
@@ -426,12 +350,10 @@ export function MemberForm({
                         disabled={lockUnit}
                         onClick={() => field.onChange(u)}
                         className={cn(
-                          "rounded-full border-2 px-4 py-2 text-sm font-semibold transition",
-                          selected
-                            ? colors.pill
-                            : cn(colors.soft, colors.text, colors.border, "border"),
-                          lockUnit && "cursor-default"
+                          "rounded-full border-2 px-3 py-1.5 text-sm font-semibold transition",
+                          lockUnit && "cursor-default opacity-80"
                         )}
+                        style={unitChipStyle(u, selected)}
                       >
                         {UNIT_LABELS[u]}
                       </button>
@@ -440,32 +362,24 @@ export function MemberForm({
                 </div>
               )}
             />
-            {errors.unit && (
-              <p className="mt-1 text-xs text-red-600">{errors.unit.message}</p>
-            )}
-          </div>
-          <Field label="Role" error={errors.role?.message} hint='e.g. "Unit Lead", "Member"'>
-            <Input {...register("role")} />
-          </Field>
-          <Field
-            label="Unit assigned date"
-            required
-            error={errors.unitAssignedDate?.message}
-          >
-            <Input
-              type="date"
-              {...register("unitAssignedDate")}
-              error={!!errors.unitAssignedDate}
-            />
-          </Field>
-        </SectionCard>
+          </FormRow>
 
-        <SectionCard
-          title="D — Membership timing"
-          helper="Registration and status dates for reporting and tenure."
-        >
-          <Field
-            label="Registration date"
+          <FormRow
+            label="Sewa role"
+            required
+            error={errors.sewaRole?.message}
+          >
+            <Select {...register("sewaRole")} error={!!errors.sewaRole}>
+              {SEWA_ROLES.map((role) => (
+                <option key={role} value={role}>
+                  {SEWA_ROLE_LABELS[role]}
+                </option>
+              ))}
+            </Select>
+          </FormRow>
+
+          <FormRow
+            label="Date Of Joining"
             required
             error={errors.registrationDate?.message}
           >
@@ -474,47 +388,301 @@ export function MemberForm({
               {...register("registrationDate")}
               error={!!errors.registrationDate}
             />
-          </Field>
-          <Field
-            label="Membership status"
-            required
-            error={errors.membershipStatus?.message}
-          >
-            <Select
-              {...register("membershipStatus")}
-              error={!!errors.membershipStatus}
-            >
-              {MEMBERSHIP_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {STATUS_LABELS[s]}
+          </FormRow>
+
+          <FormRow label="Type" error={errors.gender?.message}>
+            <Select {...register("gender")}>
+              <option value="">Select type</option>
+              {GENDERS.map((g) => (
+                <option key={g} value={g}>
+                  {TYPE_LABELS[g]}
                 </option>
               ))}
             </Select>
-          </Field>
-          <Field
-            label="Status effective date"
+          </FormRow>
+
+          <FormRow label="Name" required error={errors.fullName?.message}>
+            <Input
+              placeholder="Name"
+              {...register("fullName")}
+              error={!!errors.fullName}
+            />
+          </FormRow>
+
+          <FormRow
+            label="Father/Husband Name"
+            error={errors.fatherHusbandName?.message}
+          >
+            <Input
+              placeholder="Father/Husband Name"
+              {...register("fatherHusbandName")}
+            />
+          </FormRow>
+
+          <FormRow
+            label="Date Of Birth"
             required
-            error={errors.statusEffectiveDate?.message}
+            error={errors.dateOfBirth?.message}
+            hint={liveAge !== null ? `Age: ${liveAge}` : undefined}
           >
             <Input
               type="date"
-              {...register("statusEffectiveDate")}
-              error={!!errors.statusEffectiveDate}
+              {...register("dateOfBirth")}
+              error={!!errors.dateOfBirth}
+              max={todayIso()}
             />
-          </Field>
-          <Field label="Last renewal date" error={errors.lastRenewalDate?.message}>
-            <Input type="date" {...register("lastRenewalDate")} />
-          </Field>
-          <Field
-            label="Notes"
-            error={errors.notes?.message}
-            className="sm:col-span-2"
-          >
-            <Textarea rows={4} {...register("notes")} />
-          </Field>
-        </SectionCard>
+          </FormRow>
 
-        <div className="flex items-center justify-end gap-3 pb-8">
+          {liveAge !== null && liveAge < orgSettings.minimumAge && (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 sm:ml-[12.5rem]">
+              Age {liveAge} is below the usual minimum ({orgSettings.minimumAge}).
+              You can still submit if this is an approved exception.
+            </p>
+          )}
+
+          <FormRow label="Email" required error={errors.email?.message}>
+            <Input
+              type="email"
+              placeholder="Email"
+              {...register("email")}
+              error={!!errors.email}
+            />
+          </FormRow>
+
+          <FormRow
+            label="Qualification"
+            error={errors.qualification?.message}
+          >
+            <Select {...register("qualification")}>
+              <option value="">Select Education</option>
+              {QUALIFICATIONS.map((q) => (
+                <option key={q} value={q}>
+                  {q}
+                </option>
+              ))}
+            </Select>
+          </FormRow>
+
+          <FormRow label="Profession" error={errors.profession?.message}>
+            <Input placeholder="Profession" {...register("profession")} />
+          </FormRow>
+
+          <FormRow label="Skills" error={errors.skills?.message}>
+            <div className="space-y-2">
+              <Input
+                value={skillQuery}
+                onChange={(e) => setSkillQuery(e.target.value)}
+                placeholder="Search for skills."
+              />
+              <div className="max-h-40 overflow-y-auto rounded-md border border-slate-300 bg-white">
+                {visibleSkills.length === 0 ? (
+                  <p className="px-3 py-2 text-sm text-slate-500">
+                    No skills match “{skillQuery}”
+                  </p>
+                ) : (
+                  visibleSkills.map((skill) => (
+                    <label
+                      key={skill}
+                      className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-slate-50"
+                    >
+                      <input
+                        type="checkbox"
+                        className="rounded border-slate-300"
+                        checked={selectedSkills.includes(skill)}
+                        onChange={() => toggleSkill(skill)}
+                      />
+                      {skill}
+                    </label>
+                  ))
+                )}
+              </div>
+              {selectedSkills.length > 0 && (
+                <p className="text-xs text-slate-500">
+                  {selectedSkills.join(", ")}
+                </p>
+              )}
+              <input type="hidden" {...register("skills")} />
+            </div>
+          </FormRow>
+
+          <FormRow label="Address" required error={errors.address?.message}>
+            <Textarea
+              rows={3}
+              placeholder="Address"
+              {...register("address")}
+              error={!!errors.address}
+            />
+          </FormRow>
+
+          <FormRow
+            label="Contact No"
+            required
+            error={errors.phonePrimary?.message}
+          >
+            <Input
+              placeholder="Contact No"
+              {...register("phonePrimary")}
+              error={!!errors.phonePrimary}
+            />
+          </FormRow>
+
+          <FormRow label="Blood Group" error={errors.bloodGroup?.message}>
+            <Select {...register("bloodGroup")}>
+              <option value="">Select Blood Group</option>
+              {BLOOD_GROUPS.map((g) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
+            </Select>
+          </FormRow>
+
+          <FormRow label="Remark" error={errors.notes?.message}>
+            <Textarea rows={3} placeholder="Remark" {...register("notes")} />
+          </FormRow>
+
+          <FormRow label="Identity Doc" error={errors.identityDocUrl?.message}>
+            <div className="space-y-2">
+              <input
+                type="file"
+                accept="image/*,.pdf,application/pdf"
+                disabled={uploading}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void uploadIdentity(file);
+                }}
+                className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
+              />
+              {uploading && (
+                <p className="text-xs text-slate-500">Uploading…</p>
+              )}
+              {identityDocUrl && (
+                <a
+                  href={identityDocUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs font-medium text-blue-700 hover:underline"
+                >
+                  View uploaded document
+                </a>
+              )}
+              <input type="hidden" {...register("identityDocUrl")} />
+              <input type="hidden" {...register("photoUrl")} />
+            </div>
+          </FormRow>
+
+          <input type="hidden" {...register("preferredName")} />
+          <input type="hidden" {...register("nationalIdType")} />
+          <input type="hidden" {...register("nationalIdNumber")} />
+          <input type="hidden" {...register("phoneSecondary")} />
+          <input type="hidden" {...register("city")} />
+          <input type="hidden" {...register("stateRegion")} />
+          <input type="hidden" {...register("postalCode")} />
+          <input type="hidden" {...register("country")} />
+          <input type="hidden" {...register("emergencyContactName")} />
+          <input type="hidden" {...register("emergencyContactPhone")} />
+          <input type="hidden" {...register("unitAssignedDate")} />
+          <input type="hidden" {...register("role")} />
+          <input type="hidden" {...register("membershipStatus")} />
+          <input type="hidden" {...register("statusEffectiveDate")} />
+          <input type="hidden" {...register("lastRenewalDate")} />
+          </div>
+
+          <aside className="mx-auto w-[9.75rem] shrink-0 lg:mx-0 lg:sticky lg:top-24">
+            <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Profile photo
+            </p>
+            <button
+              type="button"
+              onClick={() => photoInputRef.current?.click()}
+              disabled={photoUploading}
+              className="group relative block h-[13.2rem] w-full overflow-hidden rounded-md border-2 border-slate-300 bg-slate-50 shadow-inner"
+              aria-label="Upload profile photo"
+            >
+              {photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={photoUrl}
+                  alt={fullName || "Profile photo"}
+                  className="h-full w-full object-cover object-top"
+                />
+              ) : (
+                <span className="flex h-full flex-col items-center justify-center gap-2 px-3 text-center text-xs text-slate-500">
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-10 w-10 text-slate-400"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    aria-hidden
+                  >
+                    <circle cx="12" cy="8" r="3.25" />
+                    <path d="M5 19.5c.8-3.2 3.4-5 7-5s6.2 1.8 7 5" />
+                  </svg>
+                  Vertical photo
+                  <span className="font-medium text-blue-700 group-hover:underline">
+                    Click to upload
+                  </span>
+                </span>
+              )}
+              {photoUploading && (
+                <span className="absolute inset-0 flex items-center justify-center bg-white/70 text-xs font-medium text-slate-700">
+                  Uploading…
+                </span>
+              )}
+            </button>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void uploadPhoto(file);
+                e.target.value = "";
+              }}
+            />
+            <div className="mt-2 flex justify-center gap-3 text-xs">
+              <button
+                type="button"
+                className="font-medium text-blue-700 hover:underline"
+                onClick={() => photoInputRef.current?.click()}
+              >
+                {photoUrl ? "Change" : "Add photo"}
+              </button>
+              {photoUrl ? (
+                <button
+                  type="button"
+                  className="font-medium text-red-600 hover:underline"
+                  onClick={() =>
+                    setValue("photoUrl", "", {
+                      shouldValidate: true,
+                      shouldDirty: true,
+                    })
+                  }
+                >
+                  Remove
+                </button>
+              ) : null}
+            </div>
+            <p className="mt-2 text-center text-[11px] leading-snug text-slate-400">
+              Passport-style, face in frame
+            </p>
+          </aside>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-7">
+          <Button
+            type="submit"
+            disabled={!isValid || submitting}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            {submitting
+              ? mode === "create"
+                ? "Submitting…"
+                : "Saving…"
+              : "Submit"}
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -525,15 +693,6 @@ export function MemberForm({
             }}
           >
             Cancel
-          </Button>
-          <Button type="submit" disabled={!isValid || submitting}>
-            {submitting
-              ? mode === "create"
-                ? "Registering…"
-                : "Saving…"
-              : mode === "create"
-                ? "Register member"
-                : "Save changes"}
           </Button>
         </div>
       </form>
@@ -553,9 +712,6 @@ export function MemberForm({
           }}
         />
       )}
-
-      {/* keep currentUnit referenced so watch stays hot in edit */}
-      <span className="hidden">{currentUnit}</span>
     </>
   );
 }

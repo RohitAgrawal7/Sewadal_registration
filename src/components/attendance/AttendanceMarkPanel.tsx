@@ -38,6 +38,8 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { LocationBreadcrumb } from "@/components/members/LocationUnitBrowser";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { PaginationBar } from "@/components/ui/PaginationBar";
+import { paginate, type PageSize } from "@/lib/pagination";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 
@@ -73,6 +75,8 @@ export function AttendanceMarkPanel({
   const [removeId, setRemoveId] = useState<string | null>(null);
   const [removedIds, setRemovedIds] = useState<string[]>([]);
   const [pdfPreview, setPdfPreview] = useState<AttendancePdfFile | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<PageSize>(20);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -111,6 +115,12 @@ export function AttendanceMarkPanel({
   const otherRows = filteredRows.filter(
     (r) => (draft[r.memberId] || r.status) !== AttendanceStatus.Present
   );
+
+  useEffect(() => {
+    setPage(1);
+  }, [listFilter, genderFilter, dateKey, unitFilter]);
+
+  const pagedPresent = paginate(presentRows, page, pageSize);
 
   function save() {
     const marks = Object.entries(draft)
@@ -154,26 +164,24 @@ export function AttendanceMarkPanel({
   }
 
   function previewPdf() {
-    setPdfPreview(
-      attendancePdfFile({
-        kind: "day",
-        dateKey,
-        unitFilter,
-        totals,
-        byUnit,
-        byGender,
-        rows: presentRows.map((r) => ({
-          fullName: r.fullName,
-          unit: r.unit,
-          gender: r.gender,
-          sessions: r.sessions ?? 0,
-          attended: r.attended ?? 0,
-          absentCount: r.absentCount ?? 0,
-          rate: r.rate ?? 0,
-          status: AttendanceStatus.Present,
-        })),
-      })
-    );
+    void attendancePdfFile({
+      kind: "day",
+      dateKey,
+      unitFilter,
+      totals,
+      byUnit,
+      byGender,
+      rows: presentRows.map((r) => ({
+        fullName: r.fullName,
+        unit: r.unit,
+        gender: r.gender,
+        sessions: r.sessions ?? 0,
+        attended: r.attended ?? 0,
+        absentCount: r.absentCount ?? 0,
+        rate: r.rate ?? 0,
+        status: AttendanceStatus.Present,
+      })),
+    }).then(setPdfPreview);
   }
 
   function removePresent(memberId: string) {
@@ -451,7 +459,7 @@ export function AttendanceMarkPanel({
           {presentRows.length > 0 && (
             <div
               id="todays-present"
-              className="overflow-x-auto rounded-xl border border-emerald-200"
+              className="overflow-hidden rounded-xl border border-emerald-200"
             >
               <div className="flex items-center justify-between gap-3 border-b border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-emerald-800">
                 <span>Present ({presentRows.length})</span>
@@ -459,6 +467,7 @@ export function AttendanceMarkPanel({
                   {formatPaRate(totals)}
                 </span>
               </div>
+              <div className="overflow-x-auto">
               <table className="min-w-full text-left text-sm">
                 <thead className="border-b border-slate-100 bg-white text-xs uppercase tracking-wide text-slate-500">
                   <tr>
@@ -474,11 +483,29 @@ export function AttendanceMarkPanel({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {presentRows.map((r, i) => (
-                    <MemberRow key={r.memberId} r={r} index={i + 1} />
+                  {pagedPresent.slice.map((r, i) => (
+                    <MemberRow
+                      key={r.memberId}
+                      r={r}
+                      index={pagedPresent.start + i + 1}
+                    />
                   ))}
                 </tbody>
               </table>
+              </div>
+              <PaginationBar
+                total={pagedPresent.total}
+                page={pagedPresent.current}
+                pageSize={pageSize}
+                from={pagedPresent.from}
+                to={pagedPresent.to}
+                pageCount={pagedPresent.pageCount}
+                onPageChange={setPage}
+                onPageSizeChange={(size) => {
+                  setPageSize(size);
+                  setPage(1);
+                }}
+              />
             </div>
           )}
         </div>

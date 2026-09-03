@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { orgSettings } from "@/lib/org-settings";
 import { cn } from "@/lib/utils";
 import { PageBackButton } from "@/components/layout/PageBackButton";
+import { logoutAction } from "@/lib/auth/actions";
 
 const links = [
   { href: "/", label: "Dashboard", match: (p: string) => p === "/" },
@@ -22,6 +23,8 @@ const links = [
 
 export function AppHeader() {
   const pathname = usePathname();
+
+  if (pathname === "/login") return null;
 
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur-md">
@@ -61,6 +64,14 @@ export function AppHeader() {
           >
             Register
           </Link>
+          <form action={logoutAction}>
+            <button
+              type="submit"
+              className="rounded-lg px-2.5 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 sm:px-3"
+            >
+              Logout
+            </button>
+          </form>
         </nav>
       </div>
     </header>

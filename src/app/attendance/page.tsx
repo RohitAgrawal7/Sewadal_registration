@@ -9,7 +9,19 @@ import { dateKey } from "@/lib/attendance/date-utils";
 import { AttendanceClient } from "@/components/attendance/AttendanceClient";
 import type { Unit } from "@/lib/enums";
 import { UNITS } from "@/lib/enums";
+import type { AttendanceTotals } from "@/lib/attendance/stats";
 import { endOfMonth, format, startOfMonth } from "date-fns";
+
+const EMPTY_TOTALS: AttendanceTotals = {
+  present: 0,
+  absent: 0,
+  late: 0,
+  excused: 0,
+  unmarked: 0,
+  recorded: 0,
+  expected: 0,
+  rate: 0,
+};
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +71,30 @@ export default async function AttendancePage({
       getRangeReport(from, to, unit),
       getMembersForSearch(),
       getAttendanceSession(selectedDate),
-    ]);
+    ]).catch((error) => {
+      console.error("Attendance page data failed during build/runtime", error);
+      return [
+        { dayMap: {} as Record<string, never> },
+        {
+          dateKey: selectedDate,
+          rows: [],
+          totals: EMPTY_TOTALS,
+          byUnit: [],
+          byGender: [],
+        },
+        {
+          fromKey: from,
+          toKey: to,
+          sessionCount: 0,
+          memberCount: 0,
+          overall: EMPTY_TOTALS,
+          byUnit: [],
+          memberStats: [],
+        },
+        [],
+        null,
+      ] as const;
+    });
 
   return (
     <AttendanceClient

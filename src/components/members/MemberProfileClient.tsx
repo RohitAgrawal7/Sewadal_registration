@@ -9,7 +9,6 @@ import { formatDateInput } from "@/lib/utils";
 import { MemberProfileHeader } from "@/components/members/MemberProfileHeader";
 import { MemberForm } from "@/components/members/MemberForm";
 import { UnitHistoryTimeline } from "@/components/members/UnitHistoryTimeline";
-import { Button } from "@/components/ui/Button";
 import type { MemberFormValues } from "@/lib/validations/member";
 import type { Gender, MembershipStatus, NationalIdType, Unit } from "@/lib/enums";
 
@@ -37,6 +36,7 @@ function toFormValues(member: Detail): MemberFormValues {
     unit: member.unit as Unit,
     unitAssignedDate: formatDateInput(member.unitAssignedDate),
     role: member.role ?? "",
+    sewaRole: (member.sewaRole as MemberFormValues["sewaRole"]) || "Sewadal",
     registrationDate: formatDateInput(member.registrationDate),
     membershipStatus: member.membershipStatus as MembershipStatus,
     statusEffectiveDate: formatDateInput(member.statusEffectiveDate),
@@ -44,6 +44,12 @@ function toFormValues(member: Detail): MemberFormValues {
       ? formatDateInput(member.lastRenewalDate)
       : "",
     notes: member.notes ?? "",
+    fatherHusbandName: member.fatherHusbandName ?? "",
+    qualification: member.qualification ?? "",
+    profession: member.profession ?? "",
+    skills: member.skills ?? "",
+    bloodGroup: member.bloodGroup ?? "",
+    identityDocUrl: member.identityDocUrl ?? "",
   };
 }
 
@@ -64,19 +70,6 @@ export function MemberProfileClient({ member }: { member: Detail }) {
   if (editing) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900">
-              Edit {member.fullName}
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Same sections as registration — unit changes are logged.
-            </p>
-          </div>
-          <Button type="button" variant="outline" onClick={leaveEdit}>
-            Cancel edit
-          </Button>
-        </div>
         <MemberForm
           mode="edit"
           memberId={member.id}
@@ -107,29 +100,46 @@ export function MemberProfileClient({ member }: { member: Detail }) {
               <dt className="text-slate-400">Phone</dt>
               <dd className="text-right text-slate-800">{member.phonePrimary}</dd>
             </div>
-            {member.phoneSecondary && (
+            <div className="flex justify-between gap-4">
+              <dt className="text-slate-400">Email</dt>
+              <dd className="text-right text-slate-800">{member.email}</dd>
+            </div>
+            {member.bloodGroup && (
               <div className="flex justify-between gap-4">
-                <dt className="text-slate-400">Secondary</dt>
+                <dt className="text-slate-400">Blood group</dt>
+                <dd className="text-right text-slate-800">{member.bloodGroup}</dd>
+              </div>
+            )}
+            {member.qualification && (
+              <div className="flex justify-between gap-4">
+                <dt className="text-slate-400">Qualification</dt>
                 <dd className="text-right text-slate-800">
-                  {member.phoneSecondary}
+                  {member.qualification}
                 </dd>
+              </div>
+            )}
+            {member.skills && (
+              <div className="flex justify-between gap-4">
+                <dt className="text-slate-400">Skills</dt>
+                <dd className="text-right text-slate-800">{member.skills}</dd>
               </div>
             )}
             <div className="flex justify-between gap-4">
               <dt className="text-slate-400">Address</dt>
-              <dd className="text-right text-slate-800">
-                {member.address}, {member.city}, {member.stateRegion}
-                {member.postalCode ? ` ${member.postalCode}` : ""},{" "}
-                {member.country}
-              </dd>
+              <dd className="text-right text-slate-800">{member.address}</dd>
             </div>
-            {(member.emergencyContactName || member.emergencyContactPhone) && (
+            {member.identityDocUrl && (
               <div className="flex justify-between gap-4">
-                <dt className="text-slate-400">Emergency</dt>
-                <dd className="text-right text-slate-800">
-                  {[member.emergencyContactName, member.emergencyContactPhone]
-                    .filter(Boolean)
-                    .join(" · ")}
+                <dt className="text-slate-400">Identity doc</dt>
+                <dd className="text-right">
+                  <a
+                    href={member.identityDocUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-blue-700 hover:underline"
+                  >
+                    View
+                  </a>
                 </dd>
               </div>
             )}
@@ -147,7 +157,7 @@ export function MemberProfileClient({ member }: { member: Detail }) {
       {member.notes && (
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
-            Notes
+            Remark
           </h2>
           <p className="whitespace-pre-wrap text-sm text-slate-700">
             {member.notes}

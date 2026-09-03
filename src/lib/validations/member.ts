@@ -9,6 +9,7 @@ import {
   Unit,
   UNITS,
 } from "@/lib/enums";
+import { SEWA_ROLES, type SewaRole } from "@/lib/sewadaar";
 
 const phoneRegex = /^\+?[\d\s()-]{7,20}$/;
 
@@ -62,6 +63,9 @@ export const memberFormSchema = z.object({
   unit: z.enum(UNITS as [Unit, ...Unit[]], { required_error: "Unit is required" }),
   unitAssignedDate: z.string().min(1, "Unit assigned date is required"),
   role: z.string().optional().or(z.literal("")),
+  sewaRole: z.enum(SEWA_ROLES as [SewaRole, ...SewaRole[]], {
+    required_error: "Sewa role is required",
+  }),
 
   registrationDate: z.string().min(1, "Registration date is required"),
   membershipStatus: z.enum(
@@ -70,6 +74,12 @@ export const memberFormSchema = z.object({
   statusEffectiveDate: z.string().min(1, "Status effective date is required"),
   lastRenewalDate: z.string().optional().or(z.literal("")),
   notes: z.string().optional().or(z.literal("")),
+  fatherHusbandName: z.string().optional().or(z.literal("")),
+  qualification: z.string().optional().or(z.literal("")),
+  profession: z.string().optional().or(z.literal("")),
+  skills: z.string().optional().or(z.literal("")),
+  bloodGroup: z.string().optional().or(z.literal("")),
+  identityDocUrl: z.string().optional().or(z.literal("")),
 });
 
 export type MemberFormValues = z.infer<typeof memberFormSchema>;

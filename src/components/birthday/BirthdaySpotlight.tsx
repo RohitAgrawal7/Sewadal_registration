@@ -7,6 +7,8 @@ import { bucketBirthdays } from "@/lib/dates";
 import { BirthdayCard } from "./BirthdayCard";
 import { BirthdayListRow } from "./BirthdayListRow";
 import { Button } from "@/components/ui/Button";
+import { PaginationBar } from "@/components/ui/PaginationBar";
+import { paginate, type PageSize } from "@/lib/pagination";
 
 export function BirthdaySpotlight({
   members,
@@ -14,7 +16,13 @@ export function BirthdaySpotlight({
   members: MemberWithDerived[];
 }) {
   const [open, setOpen] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<PageSize>(20);
   const buckets = useMemo(() => bucketBirthdays(members), [members]);
+  const monthPage = useMemo(
+    () => paginate(buckets.thisMonth, page, pageSize),
+    [buckets.thisMonth, page, pageSize]
+  );
   const hasMonth = buckets.thisMonth.length > 0;
   const hasAny =
     buckets.today.length > 0 ||
@@ -121,11 +129,26 @@ export function BirthdaySpotlight({
               <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
                 Later this month
               </h3>
-              <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200/80 bg-white/90 shadow-sm">
-                {buckets.thisMonth.map((m) => (
-                  <BirthdayListRow key={m.id} member={m} />
-                ))}
-              </ul>
+              <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white/90 shadow-sm">
+                <ul className="divide-y divide-slate-100">
+                  {monthPage.slice.map((m) => (
+                    <BirthdayListRow key={m.id} member={m} />
+                  ))}
+                </ul>
+                <PaginationBar
+                  total={monthPage.total}
+                  page={monthPage.current}
+                  pageSize={pageSize}
+                  from={monthPage.from}
+                  to={monthPage.to}
+                  pageCount={monthPage.pageCount}
+                  onPageChange={setPage}
+                  onPageSizeChange={(size) => {
+                    setPageSize(size);
+                    setPage(1);
+                  }}
+                />
+              </div>
             </div>
           )}
         </div>
