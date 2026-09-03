@@ -63,7 +63,7 @@ export const memberFormSchema = z.object({
   unit: z.enum(UNITS as [Unit, ...Unit[]], { required_error: "Unit is required" }),
   unitAssignedDate: z.string().min(1, "Unit assigned date is required"),
   role: z.string().optional().or(z.literal("")),
-  sewaRole: z.enum(SEWA_ROLES as [SewaRole, ...SewaRole[]], {
+  sewaRole: z.enum(SEWA_ROLES as unknown as [SewaRole, ...SewaRole[]], {
     required_error: "Sewa role is required",
   }),
 

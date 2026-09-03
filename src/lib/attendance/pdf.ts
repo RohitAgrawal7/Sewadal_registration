@@ -106,10 +106,15 @@ function lastY(doc: jsPDF) {
 }
 
 async function loadPdf() {
-  const [{ jsPDF }, autoTableMod] = await Promise.all([
+  const [jspdfMod, autoTableMod] = await Promise.all([
     import("jspdf"),
     import("jspdf-autotable"),
   ]);
+  const mod = jspdfMod as unknown as {
+    jsPDF?: new (options?: object) => jsPDF;
+    default: new (options?: object) => jsPDF;
+  };
+  const jsPDF = mod.jsPDF ?? mod.default;
   return { jsPDF, autoTable: autoTableMod.default };
 }
 

@@ -68,7 +68,7 @@ export function parseSkills(value: string | null | undefined): string[] {
 }
 
 export function joinSkills(skills: string[]): string {
-  return [...new Set(skills)].join(", ");
+  return Array.from(new Set(skills)).join(", ");
 }
 
 export const SEWA_ROLES = [

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Source_Sans_3 } from "next/font/google";
 import { Toaster } from "sonner";
 import { AppHeader } from "@/components/layout/AppHeader";
@@ -23,7 +24,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${sans.variable} font-sans antialiased`}>
-        <AppHeader />
+        <Suspense fallback={<div className="h-[4.25rem] border-b border-slate-200 bg-white" />}>
+          <AppHeader />
+        </Suspense>
         <main>{children}</main>
         <Toaster richColors position="top-center" closeButton />
       </body>

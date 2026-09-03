@@ -14,9 +14,7 @@ function databaseUrl() {
   if (path.isAbsolute(filePath)) return `file:${filePath}`;
 
   const relative = filePath.replace(/^\.\//, "");
-  // Prisma CLI resolves SQLite paths from prisma/schema.prisma (prisma/dev.db).
-  // PrismaClient resolves them from process.cwd(), which created an empty
-  // root-level dev.db and made member create fail.
+  // Keep CLI (schema-relative prisma/dev.db) and runtime (cwd) on the same file.
   const resolved = relative.startsWith("prisma/")
     ? path.resolve(process.cwd(), relative)
     : path.resolve(process.cwd(), "prisma", relative);

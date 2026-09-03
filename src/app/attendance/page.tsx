@@ -77,10 +77,12 @@ export default async function AttendancePage({
         { dayMap: {} as Record<string, never> },
         {
           dateKey: selectedDate,
-          rows: [],
+          rows: [] as Awaited<ReturnType<typeof getAttendanceForDate>>["rows"],
           totals: EMPTY_TOTALS,
-          byUnit: [],
-          byGender: [],
+          byUnit: [] as Awaited<ReturnType<typeof getAttendanceForDate>>["byUnit"],
+          byGender: [] as Awaited<
+            ReturnType<typeof getAttendanceForDate>
+          >["byGender"],
         },
         {
           fromKey: from,
@@ -88,11 +90,13 @@ export default async function AttendancePage({
           sessionCount: 0,
           memberCount: 0,
           overall: EMPTY_TOTALS,
-          byUnit: [],
-          memberStats: [],
+          byUnit: [] as Awaited<ReturnType<typeof getRangeReport>>["byUnit"],
+          memberStats: [] as Awaited<
+            ReturnType<typeof getRangeReport>
+          >["memberStats"],
         },
-        [],
-        null,
+        [] as Awaited<ReturnType<typeof getMembersForSearch>>,
+        null as Awaited<ReturnType<typeof getAttendanceSession>>,
       ] as const;
     });
 
