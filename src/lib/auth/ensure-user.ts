@@ -64,17 +64,22 @@ export async function ensureDefaultUser() {
   const username = process.env.AUTH_USERNAME || DEFAULT_USERNAME;
   const password = process.env.AUTH_PASSWORD || DEFAULT_PASSWORD;
 
-  const existing = await findUserByUsername(username);
-  if (existing) return existing;
+  try {
+    const existing = await findUserByUsername(username);
+    if (existing) return existing;
 
-  const previous = await findUserByUsername("Swaadal2026");
-  if (previous) {
-    await renameUser("Swaadal2026", username);
-    return { ...previous, username };
+    const previous = await findUserByUsername("Swaadal2026");
+    if (previous) {
+      await renameUser("Swaadal2026", username);
+      return { ...previous, username };
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    return createUser(username, passwordHash);
+  } catch (error) {
+    console.error("ensureDefaultUser failed", error);
+    throw error;
   }
-
-  const passwordHash = await bcrypt.hash(password, 12);
-  return createUser(username, passwordHash);
 }
 
 export async function getUserForLogin(username: string) {

@@ -3,7 +3,7 @@
   publish = ".next"
 
 [build.environment]
-  # Optional override; schema already defaults to prisma/dev.db
+  # Runtime on serverless uses /tmp via src/lib/prisma.ts
   DATABASE_URL = "file:./dev.db"
-  PRISMA_CLI_BINARY_TARGETS = "native,debian-openssl-3.0.x"
+  PRISMA_CLI_BINARY_TARGETS = "native,debian-openssl-3.0.x,rhel-openssl-3.0.x"
   SESSION_SECRET = "swaadal-session-change-me-in-netlify"

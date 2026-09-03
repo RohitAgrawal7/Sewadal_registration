@@ -5,7 +5,14 @@ import { LoginForm } from "./LoginForm";
 export const dynamic = "force-dynamic";
 
 export default async function LoginPage() {
-  await ensureDefaultUser();
+  let setupError: string | null = null;
+  try {
+    await ensureDefaultUser();
+  } catch (error) {
+    console.error("Login page database setup failed", error);
+    setupError =
+      "Database is starting up or unavailable. Wait a moment and refresh.";
+  }
 
   return (
     <div className="flex min-h-[calc(100vh-0px)] items-center justify-center px-4 py-16">
@@ -20,6 +27,11 @@ export default async function LoginPage() {
           </p>
         </div>
         <div className="px-6 py-6">
+          {setupError ? (
+            <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              {setupError}
+            </p>
+          ) : null}
           <LoginForm />
         </div>
       </div>
