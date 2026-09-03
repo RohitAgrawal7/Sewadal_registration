@@ -209,12 +209,12 @@ export function AttendanceClient({
         )}
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 scrollbar-thin sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
         <button
           type="button"
           onClick={() => pushParams({ unit: null })}
           className={cn(
-            "rounded-full border px-3 py-1.5 text-sm font-semibold transition",
+            "shrink-0 rounded-full border px-3 py-1.5 text-sm font-semibold transition",
             unit === "all"
               ? "border-slate-900 bg-slate-900 text-white"
               : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
@@ -230,7 +230,7 @@ export function AttendanceClient({
               type="button"
               onClick={() => pushParams({ unit: u })}
               style={unitChipStyle(u, active)}
-              className="rounded-full border-2 px-3 py-1.5 text-sm font-semibold transition"
+              className="shrink-0 rounded-full border-2 px-3 py-1.5 text-sm font-semibold transition"
             >
               {UNIT_LABELS[u]}
             </button>
@@ -320,8 +320,8 @@ export function AttendanceClient({
 
         {showRangeReport && (
           <div className="space-y-4 border-t border-slate-100 px-4 py-4 sm:px-6 sm:pb-6">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+          <div className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:items-end">
           <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
             From
             <Input
@@ -340,12 +340,18 @@ export function AttendanceClient({
           </label>
           <Button
             type="button"
+            className="w-full sm:w-auto"
             onClick={() => pushParams({ from: fromKey, to: toKey })}
           >
             Apply range
           </Button>
         </div>
-          <Button type="button" variant="outline" onClick={previewRangePdf}>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full sm:w-auto"
+            onClick={previewRangePdf}
+          >
             Preview range PDF
           </Button>
         </div>

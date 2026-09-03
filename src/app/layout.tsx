@@ -25,7 +25,7 @@ export default function RootLayout({
       <body className={`${sans.variable} font-sans antialiased`}>
         <AppHeader />
         <main>{children}</main>
-        <Toaster richColors position="top-right" />
+        <Toaster richColors position="top-center" closeButton />
       </body>
     </html>
   );

@@ -95,43 +95,45 @@ export function MemberProfileClient({ member }: { member: Detail }) {
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
             Contact
           </h2>
-          <dl className="space-y-2 text-sm">
-            <div className="flex justify-between gap-4">
+          <dl className="space-y-3 text-sm">
+            <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between sm:gap-4">
               <dt className="text-slate-400">Phone</dt>
-              <dd className="text-right text-slate-800">{member.phonePrimary}</dd>
+              <dd className="break-all text-slate-800 sm:text-right">
+                <a href={`tel:${member.phonePrimary}`}>{member.phonePrimary}</a>
+              </dd>
             </div>
-            <div className="flex justify-between gap-4">
+            <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between sm:gap-4">
               <dt className="text-slate-400">Email</dt>
-              <dd className="text-right text-slate-800">{member.email}</dd>
+              <dd className="break-all text-slate-800 sm:text-right">{member.email}</dd>
             </div>
             {member.bloodGroup && (
-              <div className="flex justify-between gap-4">
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between sm:gap-4">
                 <dt className="text-slate-400">Blood group</dt>
-                <dd className="text-right text-slate-800">{member.bloodGroup}</dd>
+                <dd className="text-slate-800 sm:text-right">{member.bloodGroup}</dd>
               </div>
             )}
             {member.qualification && (
-              <div className="flex justify-between gap-4">
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between sm:gap-4">
                 <dt className="text-slate-400">Qualification</dt>
-                <dd className="text-right text-slate-800">
+                <dd className="text-slate-800 sm:text-right">
                   {member.qualification}
                 </dd>
               </div>
             )}
             {member.skills && (
-              <div className="flex justify-between gap-4">
-                <dt className="text-slate-400">Skills</dt>
-                <dd className="text-right text-slate-800">{member.skills}</dd>
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between sm:gap-4">
+                <dt className="shrink-0 text-slate-400">Skills</dt>
+                <dd className="text-slate-800 sm:text-right">{member.skills}</dd>
               </div>
             )}
-            <div className="flex justify-between gap-4">
-              <dt className="text-slate-400">Address</dt>
-              <dd className="text-right text-slate-800">{member.address}</dd>
+            <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between sm:gap-4">
+              <dt className="shrink-0 text-slate-400">Address</dt>
+              <dd className="text-slate-800 sm:text-right">{member.address}</dd>
             </div>
             {member.identityDocUrl && (
-              <div className="flex justify-between gap-4">
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between sm:gap-4">
                 <dt className="text-slate-400">Identity doc</dt>
-                <dd className="text-right">
+                <dd className="sm:text-right">
                   <a
                     href={member.identityDocUrl}
                     target="_blank"

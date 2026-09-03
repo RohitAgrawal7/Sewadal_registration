@@ -31,8 +31,14 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PaginationBar } from "@/components/ui/PaginationBar";
+import {
+  LocationBanner,
+  LocationBreadcrumb,
+  UnitPickGrid,
+} from "@/components/members/LocationUnitBrowser";
 import { paginate, parsePageSize } from "@/lib/pagination";
 import { deactivateMember } from "@/lib/members/actions";
+import { cn } from "@/lib/utils";
 import {
   OFFICE_ROLE_ROWS,
   SEWA_ROLE_LABELS,
@@ -297,7 +303,7 @@ export function MemberTable({
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 bg-slate-50 px-3 py-2.5">
+        <div className="border-b border-slate-200 bg-slate-50 px-3 py-2.5 sm:px-4">
           <h3 className="text-sm font-semibold text-slate-800">
             Unit incharge &amp; office bearers
           </h3>
@@ -309,7 +315,7 @@ export function MemberTable({
           {OFFICE_ROLE_ROWS.map((row, rowIndex) => (
             <div
               key={rowIndex}
-              className="grid gap-3 px-3 py-3 sm:grid-cols-2"
+              className="grid gap-4 px-3 py-3 sm:grid-cols-2 sm:gap-3 sm:px-4"
             >
               {row.map((role: SewaRole) => {
                 const people = officeMembers.filter(
@@ -323,18 +329,21 @@ export function MemberTable({
                     {people.length === 0 ? (
                       <p className="mt-1 text-sm text-slate-400">—</p>
                     ) : (
-                      <ul className="mt-1 space-y-1">
+                      <ul className="mt-1.5 space-y-2">
                         {people.map((m) => (
-                          <li key={m.id} className="text-sm">
+                          <li key={m.id} className="min-w-0 text-sm">
                             <Link
                               href={memberHref(m.id, listPath)}
-                              className="font-medium text-slate-800 hover:underline"
+                              className="block font-medium text-slate-800 hover:underline"
                             >
                               {m.fullName}
                             </Link>
-                            <span className="ml-2 text-xs text-slate-500">
+                            <a
+                              href={`tel:${m.phonePrimary}`}
+                              className="mt-0.5 block break-all text-xs text-slate-500"
+                            >
                               {m.phonePrimary}
-                            </span>
+                            </a>
                           </li>
                         ))}
                       </ul>
@@ -348,155 +357,260 @@ export function MemberTable({
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
-        <table className="min-w-full text-left text-sm">
-          <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-            <tr>
-              <th className="w-12 px-3 py-2.5 font-medium">#</th>
-              <th className="px-3 py-2.5 font-medium">
-                <button type="button" onClick={() => toggleSort("name")}>
-                  Name {sort === "name" ? (dir === "asc" ? "↑" : "↓") : ""}
-                </button>
-              </th>
-              <th className="px-3 py-2.5 font-medium">Gender</th>
-              <th className="px-3 py-2.5 font-medium">
-                <button type="button" onClick={() => toggleSort("unit")}>
-                  Unit {sort === "unit" ? (dir === "asc" ? "↑" : "↓") : ""}
-                </button>
-              </th>
-              <th className="px-3 py-2.5 font-medium">Phone</th>
-              <th className="px-3 py-2.5 font-medium">Total sessions</th>
-              <th className="px-3 py-2.5 font-medium">Attended</th>
-              <th className="px-3 py-2.5 font-medium">Absent</th>
-              <th className="px-3 py-2.5 font-medium">%</th>
-              <th className="px-3 py-2.5 font-medium">
-                <button type="button" onClick={() => toggleSort("birthday")}>
-                  Birthday{" "}
-                  {sort === "birthday" ? (dir === "asc" ? "↑" : "↓") : ""}
-                </button>
-              </th>
-              <th className="px-3 py-2.5 font-medium">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {filtered.length === 0 && (
-              <tr>
-                <td
-                  colSpan={11}
-                  className="px-3 py-10 text-center text-slate-500"
-                >
-                  No members match these filters.
-                </td>
-              </tr>
-            )}
-            {paged.slice.map((m, index) => {
-              const a = m.attendance ?? EMPTY_ATTENDANCE;
-              return (
-              <tr key={m.id} className={genderColors(m.gender).row}>
-                <td className="px-3 py-2.5 tabular-nums text-slate-500">
-                  {paged.start + index + 1}
-                </td>
-                <td className="px-3 py-2.5 font-medium text-slate-900">
-                  <Link
-                    href={memberHref(m.id, listPath)}
-                    className="hover:underline"
+        {filtered.length === 0 ? (
+          <p className="px-4 py-10 text-center text-sm text-slate-500">
+            No members match these filters.
+          </p>
+        ) : (
+          <>
+            <div className="divide-y divide-slate-100 md:hidden">
+              {paged.slice.map((m, index) => {
+                const a = m.attendance ?? EMPTY_ATTENDANCE;
+                return (
+                  <article
+                    key={m.id}
+                    className={cn("px-3 py-3.5", genderColors(m.gender).row)}
                   >
-                    {m.fullName}
-                  </Link>
-                </td>
-                <td className="px-3 py-2.5">
-                  <GenderBadge gender={m.gender} />
-                </td>
-                <td className="px-3 py-2.5">
-                  <UnitBadge unit={m.unit} />
-                </td>
-                <td className="px-3 py-2.5 text-slate-600">{m.phonePrimary}</td>
-                <td className="px-3 py-2.5 tabular-nums text-slate-700">
-                  {a.recorded}
-                </td>
-                <td className="px-3 py-2.5 font-semibold tabular-nums text-emerald-700">
-                  {a.attended}
-                </td>
-                <td className="px-3 py-2.5 font-semibold tabular-nums text-red-700">
-                  {a.absent}
-                </td>
-                <td className="px-3 py-2.5 font-semibold tabular-nums text-slate-800">
-                  {a.rate}%
-                </td>
-                <td className="px-3 py-2.5 text-slate-600">
-                  {formatDate(m.dateOfBirth, "MMM d")}
-                  {m.derived && m.derived.daysUntilNextBirthday <= 30 && (
-                    <span className="ml-1 text-amber-700">
-                      🎂 in {m.derived.daysUntilNextBirthday}d
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 py-2.5">
-                  <div className="flex flex-wrap gap-1">
-                    <Link href={memberHref(m.id, listPath)}>
-                      <Button type="button" size="sm" variant="ghost">
-                        View
-                      </Button>
-                    </Link>
-                    <Link href={memberHref(m.id, listPath, true)}>
-                      <Button type="button" size="sm" variant="outline">
-                        Edit
-                      </Button>
-                    </Link>
-                    {m.membershipStatus !== MembershipStatus.Inactive && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 w-8 p-0 text-red-600 hover:bg-red-50"
-                        title="Deactivate"
-                        aria-label={`Deactivate ${m.fullName}`}
-                        onClick={() => setDeactivateId(m.id)}
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          className="h-4 w-4"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          aria-hidden
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[11px] tabular-nums text-slate-400">
+                          #{paged.start + index + 1}
+                        </p>
+                        <Link
+                          href={memberHref(m.id, listPath)}
+                          className="mt-0.5 block text-base font-semibold text-slate-900 hover:underline"
                         >
-                          <circle cx="12" cy="12" r="9" />
-                          <path d="M7 7l10 10" />
-                        </svg>
-                      </Button>
-                    )}
+                          {m.fullName}
+                        </Link>
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          <GenderBadge gender={m.gender} />
+                          <UnitBadge unit={m.unit} />
+                        </div>
+                        <a
+                          href={`tel:${m.phonePrimary}`}
+                          className="mt-2 block break-all text-sm text-slate-600"
+                        >
+                          {m.phonePrimary}
+                        </a>
+                      </div>
+                      <div className="flex shrink-0 flex-col gap-1">
+                        <Link href={memberHref(m.id, listPath)}>
+                          <Button type="button" size="sm" variant="ghost" className="w-full">
+                            View
+                          </Button>
+                        </Link>
+                        <Link href={memberHref(m.id, listPath, true)}>
+                          <Button type="button" size="sm" variant="outline" className="w-full">
+                            Edit
+                          </Button>
+                        </Link>
+                        {m.membershipStatus !== MembershipStatus.Inactive && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="text-red-600 hover:bg-red-50"
+                            title="Deactivate"
+                            aria-label={`Deactivate ${m.fullName}`}
+                            onClick={() => setDeactivateId(m.id)}
+                          >
+                            Off
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="mt-3 grid grid-cols-4 gap-2 rounded-lg border border-slate-200/80 bg-white/70 px-2 py-2 text-center">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-slate-400">Sess</p>
+                        <p className="text-sm font-semibold tabular-nums text-slate-800">{a.recorded}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-slate-400">In</p>
+                        <p className="text-sm font-semibold tabular-nums text-emerald-700">{a.attended}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-slate-400">Out</p>
+                        <p className="text-sm font-semibold tabular-nums text-red-700">{a.absent}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-slate-400">%</p>
+                        <p className="text-sm font-semibold tabular-nums text-slate-800">{a.rate}%</p>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-500">
+                      Birthday {formatDate(m.dateOfBirth, "MMM d")}
+                      {m.derived && m.derived.daysUntilNextBirthday <= 30 && (
+                        <span className="ml-1 text-amber-700">
+                          · in {m.derived.daysUntilNextBirthday}d
+                        </span>
+                      )}
+                    </p>
+                  </article>
+                );
+              })}
+              {filtered.length > 0 && (
+                <div className="grid grid-cols-4 gap-2 bg-slate-50 px-3 py-3 text-center text-sm font-semibold">
+                  <div>
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Total</p>
+                    <p className="tabular-nums text-slate-800">{listTotals.sessions}</p>
                   </div>
-                </td>
-              </tr>
-              );
-            })}
-          </tbody>
-          {filtered.length > 0 && (
-            <tfoot>
-              <tr className="border-t border-slate-200 bg-slate-50 text-sm font-semibold">
-                <td className="px-3 py-2.5" colSpan={5}>
-                  Total
-                </td>
-                <td className="px-3 py-2.5 tabular-nums text-slate-800">
-                  {listTotals.sessions}
-                </td>
-                <td className="px-3 py-2.5 tabular-nums text-emerald-700">
-                  {listTotals.attended}
-                </td>
-                <td className="px-3 py-2.5 tabular-nums text-red-700">
-                  {listTotals.absent}
-                </td>
-                <td className="px-3 py-2.5 tabular-nums text-slate-800">
-                  {listTotals.rate}%
-                </td>
-                <td className="px-3 py-2.5" colSpan={2} />
-              </tr>
-            </tfoot>
-          )}
-        </table>
-        </div>
+                  <div>
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">In</p>
+                    <p className="tabular-nums text-emerald-700">{listTotals.attended}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Out</p>
+                    <p className="tabular-nums text-red-700">{listTotals.absent}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">%</p>
+                    <p className="tabular-nums text-slate-800">{listTotals.rate}%</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
+              <table className="min-w-full text-left text-sm">
+                <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="w-12 px-3 py-2.5 font-medium">#</th>
+                    <th className="px-3 py-2.5 font-medium">
+                      <button type="button" onClick={() => toggleSort("name")}>
+                        Name {sort === "name" ? (dir === "asc" ? "↑" : "↓") : ""}
+                      </button>
+                    </th>
+                    <th className="px-3 py-2.5 font-medium">Gender</th>
+                    <th className="px-3 py-2.5 font-medium">
+                      <button type="button" onClick={() => toggleSort("unit")}>
+                        Unit {sort === "unit" ? (dir === "asc" ? "↑" : "↓") : ""}
+                      </button>
+                    </th>
+                    <th className="px-3 py-2.5 font-medium">Phone</th>
+                    <th className="px-3 py-2.5 font-medium">Total sessions</th>
+                    <th className="px-3 py-2.5 font-medium">Attended</th>
+                    <th className="px-3 py-2.5 font-medium">Absent</th>
+                    <th className="px-3 py-2.5 font-medium">%</th>
+                    <th className="px-3 py-2.5 font-medium">
+                      <button type="button" onClick={() => toggleSort("birthday")}>
+                        Birthday{" "}
+                        {sort === "birthday" ? (dir === "asc" ? "↑" : "↓") : ""}
+                      </button>
+                    </th>
+                    <th className="px-3 py-2.5 font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {paged.slice.map((m, index) => {
+                    const a = m.attendance ?? EMPTY_ATTENDANCE;
+                    return (
+                      <tr key={m.id} className={genderColors(m.gender).row}>
+                        <td className="px-3 py-2.5 tabular-nums text-slate-500">
+                          {paged.start + index + 1}
+                        </td>
+                        <td className="px-3 py-2.5 font-medium text-slate-900">
+                          <Link
+                            href={memberHref(m.id, listPath)}
+                            className="hover:underline"
+                          >
+                            {m.fullName}
+                          </Link>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <GenderBadge gender={m.gender} />
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <UnitBadge unit={m.unit} />
+                        </td>
+                        <td className="px-3 py-2.5 text-slate-600">{m.phonePrimary}</td>
+                        <td className="px-3 py-2.5 tabular-nums text-slate-700">
+                          {a.recorded}
+                        </td>
+                        <td className="px-3 py-2.5 font-semibold tabular-nums text-emerald-700">
+                          {a.attended}
+                        </td>
+                        <td className="px-3 py-2.5 font-semibold tabular-nums text-red-700">
+                          {a.absent}
+                        </td>
+                        <td className="px-3 py-2.5 font-semibold tabular-nums text-slate-800">
+                          {a.rate}%
+                        </td>
+                        <td className="px-3 py-2.5 text-slate-600">
+                          {formatDate(m.dateOfBirth, "MMM d")}
+                          {m.derived && m.derived.daysUntilNextBirthday <= 30 && (
+                            <span className="ml-1 text-amber-700">
+                              🎂 in {m.derived.daysUntilNextBirthday}d
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <div className="flex flex-wrap gap-1">
+                            <Link href={memberHref(m.id, listPath)}>
+                              <Button type="button" size="sm" variant="ghost">
+                                View
+                              </Button>
+                            </Link>
+                            <Link href={memberHref(m.id, listPath, true)}>
+                              <Button type="button" size="sm" variant="outline">
+                                Edit
+                              </Button>
+                            </Link>
+                            {m.membershipStatus !== MembershipStatus.Inactive && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 w-8 p-0 text-red-600 hover:bg-red-50"
+                                title="Deactivate"
+                                aria-label={`Deactivate ${m.fullName}`}
+                                onClick={() => setDeactivateId(m.id)}
+                              >
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  className="h-4 w-4"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  aria-hidden
+                                >
+                                  <circle cx="12" cy="12" r="9" />
+                                  <path d="M7 7l10 10" />
+                                </svg>
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                {filtered.length > 0 && (
+                  <tfoot>
+                    <tr className="border-t border-slate-200 bg-slate-50 text-sm font-semibold">
+                      <td className="px-3 py-2.5" colSpan={5}>
+                        Total
+                      </td>
+                      <td className="px-3 py-2.5 tabular-nums text-slate-800">
+                        {listTotals.sessions}
+                      </td>
+                      <td className="px-3 py-2.5 tabular-nums text-emerald-700">
+                        {listTotals.attended}
+                      </td>
+                      <td className="px-3 py-2.5 tabular-nums text-red-700">
+                        {listTotals.absent}
+                      </td>
+                      <td className="px-3 py-2.5 tabular-nums text-slate-800">
+                        {listTotals.rate}%
+                      </td>
+                      <td className="px-3 py-2.5" colSpan={2} />
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </>
+        )}
         <PaginationBar
           total={paged.total}
           page={paged.current}

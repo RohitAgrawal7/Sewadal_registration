@@ -11,11 +11,11 @@ function Metric({
   tone: string;
 }) {
   return (
-    <div className={cn("rounded-xl border px-3 py-2.5", tone)}>
+    <div className={cn("rounded-xl border px-2.5 py-2 sm:px-3 sm:py-2.5", tone)}>
       <p className="text-[10px] font-semibold uppercase tracking-wide opacity-80">
         {label}
       </p>
-      <p className="mt-0.5 text-xl font-bold tabular-nums">{value}</p>
+      <p className="mt-0.5 text-lg font-bold tabular-nums sm:text-xl">{value}</p>
     </div>
   );
 }
@@ -46,7 +46,7 @@ export function AttendanceSummaryCards({
           tone="border-red-200 bg-red-50 text-red-800"
         />
         <Metric
-          label="Percentage"
+          label="%"
           value={`${totals.rate}%`}
           tone="border-blue-200 bg-blue-50 text-blue-800"
         />

@@ -16,6 +16,7 @@
 
 html {
   scroll-behavior: smooth;
+  overflow-x: hidden;
 }
 
 body {
@@ -35,8 +36,16 @@ body {
     18px 18px,
     36px 36px,
     36px 36px;
-  background-attachment: fixed;
+  background-attachment: scroll;
   min-height: 100vh;
+  overflow-x: hidden;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@media (min-width: 768px) {
+  body {
+    background-attachment: fixed;
+  }
 }
 
 @layer utilities {

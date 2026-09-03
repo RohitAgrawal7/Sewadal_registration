@@ -94,8 +94,8 @@ function FormRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid grid-cols-1 items-start gap-1.5 sm:grid-cols-[11.5rem_minmax(0,28rem)] sm:gap-x-4">
-      <span className="pt-2 text-sm font-medium text-slate-700 sm:text-right">
+    <div className="grid grid-cols-1 items-start gap-1.5 sm:grid-cols-[10.5rem_minmax(0,1fr)] sm:gap-x-4 lg:grid-cols-[11.5rem_minmax(0,28rem)]">
+      <span className="pt-0 text-sm font-medium text-slate-700 sm:pt-2 sm:text-right">
         {label}
         {required ? <span className="text-red-500"> *</span> : null}
       </span>
@@ -309,7 +309,7 @@ export function MemberForm({
         onSubmit={handleSubmit((v) => onSubmit(v, false))}
         className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
       >
-        <div className="border-b border-slate-200 bg-slate-50 px-5 py-4 sm:px-7">
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-4 sm:px-7">
           <h2 className="text-xl font-bold text-slate-900 sm:text-2xl">
             {mode === "create" ? "New Sewadaar" : "Edit Sewadaar"}
           </h2>
@@ -329,7 +329,89 @@ export function MemberForm({
           </dl>
         </div>
 
-        <div className="flex flex-col gap-6 px-5 py-5 sm:px-7 sm:py-6 lg:flex-row lg:items-start">
+        <div className="flex flex-col gap-6 px-4 py-5 sm:px-7 sm:py-6 lg:flex-row lg:items-start">
+          <aside className="order-first mx-auto w-[9.75rem] shrink-0 lg:order-last lg:mx-0 lg:sticky lg:top-24">
+            <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Profile photo
+            </p>
+            <button
+              type="button"
+              onClick={() => photoInputRef.current?.click()}
+              disabled={photoUploading}
+              className="group relative block h-[13.2rem] w-full overflow-hidden rounded-md border-2 border-slate-300 bg-slate-50 shadow-inner"
+              aria-label="Upload profile photo"
+            >
+              {photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={photoUrl}
+                  alt={fullName || "Profile photo"}
+                  className="h-full w-full object-cover object-top"
+                />
+              ) : (
+                <span className="flex h-full flex-col items-center justify-center gap-2 px-3 text-center text-xs text-slate-500">
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-10 w-10 text-slate-400"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    aria-hidden
+                  >
+                    <circle cx="12" cy="8" r="3.25" />
+                    <path d="M5 19.5c.8-3.2 3.4-5 7-5s6.2 1.8 7 5" />
+                  </svg>
+                  Vertical photo
+                  <span className="font-medium text-blue-700 group-hover:underline">
+                    Click to upload
+                  </span>
+                </span>
+              )}
+              {photoUploading && (
+                <span className="absolute inset-0 flex items-center justify-center bg-white/70 text-xs font-medium text-slate-700">
+                  Uploading…
+                </span>
+              )}
+            </button>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void uploadPhoto(file);
+                e.target.value = "";
+              }}
+            />
+            <div className="mt-2 flex justify-center gap-3 text-xs">
+              <button
+                type="button"
+                className="font-medium text-blue-700 hover:underline"
+                onClick={() => photoInputRef.current?.click()}
+              >
+                {photoUrl ? "Change" : "Add photo"}
+              </button>
+              {photoUrl ? (
+                <button
+                  type="button"
+                  className="font-medium text-red-600 hover:underline"
+                  onClick={() =>
+                    setValue("photoUrl", "", {
+                      shouldValidate: true,
+                      shouldDirty: true,
+                    })
+                  }
+                >
+                  Remove
+                </button>
+              ) : null}
+            </div>
+            <p className="mt-2 text-center text-[11px] leading-snug text-slate-400">
+              Passport-style, face in frame
+            </p>
+          </aside>
+
           <div className="min-w-0 flex-1 space-y-4">
           <FormRow
             label="Unit"
@@ -340,7 +422,7 @@ export function MemberForm({
               control={control}
               name="unit"
               render={({ field }) => (
-                <div className="flex flex-wrap gap-2">
+                <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 scrollbar-thin sm:flex-wrap sm:overflow-visible">
                   {ALL_UNITS.map((u) => {
                     const selected = field.value === u;
                     return (
@@ -350,7 +432,7 @@ export function MemberForm({
                         disabled={lockUnit}
                         onClick={() => field.onChange(u)}
                         className={cn(
-                          "rounded-full border-2 px-3 py-1.5 text-sm font-semibold transition",
+                          "shrink-0 rounded-full border-2 px-3 py-1.5 text-sm font-semibold transition",
                           lockUnit && "cursor-default opacity-80"
                         )}
                         style={unitChipStyle(u, selected)}
@@ -434,7 +516,7 @@ export function MemberForm({
           </FormRow>
 
           {liveAge !== null && liveAge < orgSettings.minimumAge && (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 sm:ml-[12.5rem]">
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 lg:ml-[12.5rem]">
               Age {liveAge} is below the usual minimum ({orgSettings.minimumAge}).
               You can still submit if this is an approved exception.
             </p>
@@ -587,95 +669,13 @@ export function MemberForm({
           <input type="hidden" {...register("statusEffectiveDate")} />
           <input type="hidden" {...register("lastRenewalDate")} />
           </div>
-
-          <aside className="mx-auto w-[9.75rem] shrink-0 lg:mx-0 lg:sticky lg:top-24">
-            <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Profile photo
-            </p>
-            <button
-              type="button"
-              onClick={() => photoInputRef.current?.click()}
-              disabled={photoUploading}
-              className="group relative block h-[13.2rem] w-full overflow-hidden rounded-md border-2 border-slate-300 bg-slate-50 shadow-inner"
-              aria-label="Upload profile photo"
-            >
-              {photoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={photoUrl}
-                  alt={fullName || "Profile photo"}
-                  className="h-full w-full object-cover object-top"
-                />
-              ) : (
-                <span className="flex h-full flex-col items-center justify-center gap-2 px-3 text-center text-xs text-slate-500">
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="h-10 w-10 text-slate-400"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    aria-hidden
-                  >
-                    <circle cx="12" cy="8" r="3.25" />
-                    <path d="M5 19.5c.8-3.2 3.4-5 7-5s6.2 1.8 7 5" />
-                  </svg>
-                  Vertical photo
-                  <span className="font-medium text-blue-700 group-hover:underline">
-                    Click to upload
-                  </span>
-                </span>
-              )}
-              {photoUploading && (
-                <span className="absolute inset-0 flex items-center justify-center bg-white/70 text-xs font-medium text-slate-700">
-                  Uploading…
-                </span>
-              )}
-            </button>
-            <input
-              ref={photoInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) void uploadPhoto(file);
-                e.target.value = "";
-              }}
-            />
-            <div className="mt-2 flex justify-center gap-3 text-xs">
-              <button
-                type="button"
-                className="font-medium text-blue-700 hover:underline"
-                onClick={() => photoInputRef.current?.click()}
-              >
-                {photoUrl ? "Change" : "Add photo"}
-              </button>
-              {photoUrl ? (
-                <button
-                  type="button"
-                  className="font-medium text-red-600 hover:underline"
-                  onClick={() =>
-                    setValue("photoUrl", "", {
-                      shouldValidate: true,
-                      shouldDirty: true,
-                    })
-                  }
-                >
-                  Remove
-                </button>
-              ) : null}
-            </div>
-            <p className="mt-2 text-center text-[11px] leading-snug text-slate-400">
-              Passport-style, face in frame
-            </p>
-          </aside>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-7">
+        <div className="flex flex-col gap-2 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3 sm:px-7">
           <Button
             type="submit"
             disabled={!isValid || submitting}
-            className="bg-blue-600 hover:bg-blue-700"
+            className="w-full bg-blue-600 hover:bg-blue-700 sm:w-auto"
           >
             {submitting
               ? mode === "create"
@@ -686,6 +686,7 @@ export function MemberForm({
           <Button
             type="button"
             variant="outline"
+            className="w-full sm:w-auto"
             onClick={() => {
               if (onCancel) onCancel();
               else if (returnTo) router.push(returnTo);

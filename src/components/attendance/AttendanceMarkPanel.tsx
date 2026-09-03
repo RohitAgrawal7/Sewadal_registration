@@ -250,10 +250,73 @@ export function AttendanceMarkPanel({
     );
   }
 
+  function MemberCard({
+    r,
+    index,
+  }: {
+    r: MemberAttendanceRow;
+    index: number;
+  }) {
+    return (
+      <article className={cn("px-3 py-3.5", genderColors(r.gender).row)}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] tabular-nums text-slate-400">#{index}</p>
+            <Link
+              href={memberHref(r.memberId, returnTo)}
+              className="mt-0.5 block text-base font-semibold text-slate-900 hover:underline"
+            >
+              {r.fullName}
+            </Link>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <UnitBadge unit={r.unit} />
+              <GenderBadge gender={r.gender} />
+            </div>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="shrink-0 text-red-600 hover:bg-red-50"
+            onClick={() => setRemoveId(r.memberId)}
+          >
+            Delete
+          </Button>
+        </div>
+        <div className="mt-3 grid grid-cols-4 gap-2 rounded-lg border border-slate-200/80 bg-white/70 px-2 py-2 text-center">
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-slate-400">Sess</p>
+            <p className="text-sm font-semibold tabular-nums text-slate-800">
+              {r.sessions ?? 0}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-slate-400">In</p>
+            <p className="text-sm font-semibold tabular-nums text-emerald-700">
+              {r.attended ?? 0}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-slate-400">Out</p>
+            <p className="text-sm font-semibold tabular-nums text-red-700">
+              {r.absentCount ?? 0}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-slate-400">%</p>
+            <p className="text-sm font-semibold tabular-nums text-slate-800">
+              {r.rate ?? 0}%
+            </p>
+          </div>
+        </div>
+      </article>
+    );
+  }
+
   return (
-    <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+    <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <h2 className="text-base font-bold text-slate-900">
             Today&apos;s attendance
           </h2>
@@ -264,11 +327,12 @@ export function AttendanceMarkPanel({
               : " · All units"}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           <Button
             type="button"
             size="sm"
             variant="outline"
+            className="w-full sm:w-auto"
             disabled={pending || rows.length === 0}
             onClick={() => bulk(AttendanceStatus.Present)}
           >
@@ -278,6 +342,7 @@ export function AttendanceMarkPanel({
             type="button"
             size="sm"
             variant="outline"
+            className="w-full sm:w-auto"
             disabled={pending || rows.length === 0}
             onClick={() => bulk(AttendanceStatus.Absent)}
           >
@@ -287,6 +352,7 @@ export function AttendanceMarkPanel({
             type="button"
             size="sm"
             variant="outline"
+            className="w-full sm:w-auto"
             disabled={pending || rows.length === 0}
             onClick={previewPdf}
           >
@@ -295,6 +361,7 @@ export function AttendanceMarkPanel({
           <Button
             type="button"
             size="sm"
+            className="w-full sm:w-auto"
             disabled={pending || rows.length === 0}
             onClick={save}
           >
@@ -461,37 +528,46 @@ export function AttendanceMarkPanel({
               id="todays-present"
               className="overflow-hidden rounded-xl border border-emerald-200"
             >
-              <div className="flex items-center justify-between gap-3 border-b border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-emerald-800">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-emerald-800">
                 <span>Present ({presentRows.length})</span>
                 <span className="normal-case tracking-normal text-emerald-900">
                   {formatPaRate(totals)}
                 </span>
               </div>
-              <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
-                <thead className="border-b border-slate-100 bg-white text-xs uppercase tracking-wide text-slate-500">
-                  <tr>
-                    <th className="w-12 px-3 py-2 font-medium">#</th>
-                    <th className="px-3 py-2 font-medium">Member</th>
-                    <th className="px-3 py-2 font-medium">Unit</th>
-                    <th className="px-3 py-2 font-medium">Gender</th>
-                    <th className="px-3 py-2 font-medium">Total sessions</th>
-                    <th className="px-3 py-2 font-medium">Attended</th>
-                    <th className="px-3 py-2 font-medium">Absent</th>
-                    <th className="px-3 py-2 font-medium">%</th>
-                    <th className="px-3 py-2 font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {pagedPresent.slice.map((r, i) => (
-                    <MemberRow
-                      key={r.memberId}
-                      r={r}
-                      index={pagedPresent.start + i + 1}
-                    />
-                  ))}
-                </tbody>
-              </table>
+              <div className="divide-y divide-slate-100 md:hidden">
+                {pagedPresent.slice.map((r, i) => (
+                  <MemberCard
+                    key={r.memberId}
+                    r={r}
+                    index={pagedPresent.start + i + 1}
+                  />
+                ))}
+              </div>
+              <div className="hidden overflow-x-auto md:block">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="border-b border-slate-100 bg-white text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="w-12 px-3 py-2 font-medium">#</th>
+                      <th className="px-3 py-2 font-medium">Member</th>
+                      <th className="px-3 py-2 font-medium">Unit</th>
+                      <th className="px-3 py-2 font-medium">Gender</th>
+                      <th className="px-3 py-2 font-medium">Total sessions</th>
+                      <th className="px-3 py-2 font-medium">Attended</th>
+                      <th className="px-3 py-2 font-medium">Absent</th>
+                      <th className="px-3 py-2 font-medium">%</th>
+                      <th className="px-3 py-2 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {pagedPresent.slice.map((r, i) => (
+                      <MemberRow
+                        key={r.memberId}
+                        r={r}
+                        index={pagedPresent.start + i + 1}
+                      />
+                    ))}
+                  </tbody>
+                </table>
               </div>
               <PaginationBar
                 total={pagedPresent.total}
