@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { orgSettings } from "@/lib/org-settings";
 import { ensureDefaultUser } from "@/lib/auth/ensure-user";
 import { LoginForm } from "./LoginForm";
@@ -27,18 +26,19 @@ export default async function LoginPage() {
       />
 
       <div className="relative w-full max-w-md">
-        <div className="mb-6 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-sky-50 to-amber-50 shadow-lg shadow-sky-600/15 ring-1 ring-sky-200/80">
-            <Image
-              src="/logo.png"
-              alt="Sewadal Management Sewa"
-              width={64}
-              height={64}
-              className="h-16 w-16 object-cover"
-              priority
+        <div className="mb-7 text-center">
+          <div className="mx-auto mb-5 h-40 w-40 overflow-hidden rounded-full bg-white shadow-[0_8px_30px_rgba(14,165,233,0.18)] ring-4 ring-white sm:h-44 sm:w-44">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`/login-logo.png?v=5`}
+              alt="Sant Nirankari Mission"
+              width={176}
+              height={176}
+              className="h-full w-full object-cover object-center"
+              decoding="async"
             />
           </div>
-          <p className="bg-gradient-to-r from-sky-700 to-amber-800 bg-clip-text text-[11px] font-semibold uppercase tracking-[0.18em] text-transparent">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-800">
             {orgSettings.locationName}
           </p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-800">
@@ -49,11 +49,35 @@ export default async function LoginPage() {
           </p>
         </div>
 
-        <div className="rounded-2xl border border-sky-100/80 bg-gradient-to-br from-white via-sky-50/40 to-amber-50/50 p-6 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_40px_rgba(37,99,235,0.12)] backdrop-blur-sm sm:p-8">
+        <div className="rounded-2xl border border-sky-100/80 bg-white/95 p-6 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_40px_rgba(37,99,235,0.1)] backdrop-blur-sm sm:p-8">
           {setupError ? (
-            <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              {setupError}
-            </p>
+            <div
+              role="alert"
+              className="mb-5 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm text-amber-950"
+            >
+              <span
+                className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700"
+                aria-hidden
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path
+                    d="M12 9v4m0 4h.01M10.3 4.3L2.8 17.2A2 2 0 004.5 20h15a2 2 0 001.7-2.8L13.7 4.3a2 2 0 00-3.4 0z"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </span>
+              <div>
+                <p className="font-semibold">Connection issue</p>
+                <p className="mt-0.5 text-amber-800/90">{setupError}</p>
+              </div>
+            </div>
           ) : null}
           <LoginForm />
         </div>
