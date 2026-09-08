@@ -7,11 +7,18 @@ const globalForPrisma = globalThis as unknown as {
   prismaReady: Promise<void> | undefined;
 };
 
-function databaseUrl() {
-  const url = process.env.DATABASE_URL;
+/** Strip quotes/whitespace — common when pasting into Vercel env UI. */
+export function resolveDatabaseUrl(): string {
+  let url = (process.env.DATABASE_URL ?? "").trim();
+  if (
+    (url.startsWith('"') && url.endsWith('"')) ||
+    (url.startsWith("'") && url.endsWith("'"))
+  ) {
+    url = url.slice(1, -1).trim();
+  }
   if (!url) {
     throw new Error(
-      "DATABASE_URL is not set. Add your Supabase Postgres URL to .env"
+      "DATABASE_URL is not set. Add your Supabase Postgres URL in Vercel Environment Variables."
     );
   }
   return url;
@@ -20,7 +27,7 @@ function databaseUrl() {
 function createPrismaClient() {
   return new PrismaClient({
     datasources: {
-      db: { url: databaseUrl() },
+      db: { url: resolveDatabaseUrl() },
     },
   });
 }
@@ -51,7 +58,7 @@ function hasLatestModels(client: PrismaClient): boolean {
 }
 
 function getClient(): PrismaClient {
-  const url = databaseUrl();
+  const url = resolveDatabaseUrl();
   const existing = globalForPrisma.prisma;
   if (
     existing &&

@@ -28,7 +28,7 @@ async function renameUser(fromUsername: string, toUsername: string) {
   });
 }
 
-export async function ensureDefaultUser() {
+export async function ensureDefaultUser(): Promise<UserRow | null> {
   const username = process.env.AUTH_USERNAME || DEFAULT_USERNAME;
   const password = process.env.AUTH_PASSWORD || DEFAULT_PASSWORD;
 
@@ -46,11 +46,16 @@ export async function ensureDefaultUser() {
     return createUser(username, passwordHash);
   } catch (error) {
     console.error("ensureDefaultUser failed", error);
-    throw error;
+    return null;
   }
 }
 
 export async function getUserForLogin(username: string) {
-  await ensureDefaultUser();
-  return findUserByUsername(username);
+  try {
+    await ensureDefaultUser();
+    return findUserByUsername(username);
+  } catch (error) {
+    console.error("getUserForLogin failed", error);
+    return null;
+  }
 }

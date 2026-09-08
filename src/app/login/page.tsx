@@ -7,11 +7,15 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage() {
   let setupError: string | null = null;
   try {
-    await ensureDefaultUser();
+    const user = await ensureDefaultUser();
+    if (!user) {
+      setupError =
+        "Database is unavailable. On Vercel, set DATABASE_URL (Supabase pooler) and redeploy.";
+    }
   } catch (error) {
     console.error("Login page database setup failed", error);
     setupError =
-      "Database is starting up or unavailable. Wait a moment and refresh.";
+      "Database is unavailable. On Vercel, set DATABASE_URL (Supabase pooler) and redeploy.";
   }
 
   return (
