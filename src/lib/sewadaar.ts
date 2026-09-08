@@ -74,8 +74,10 @@ export function joinSkills(skills: string[]): string {
 export const SEWA_ROLES = [
   "Sewadal",
   "UnitIncharge",
+  "SahayakShikshak",
   "SahayakShishika",
   "Shishika",
+  "Shikshak",
   "KshetriyaSanchalak",
   "Sanchalak",
 ] as const;
@@ -85,16 +87,36 @@ export type SewaRole = (typeof SEWA_ROLES)[number];
 export const SEWA_ROLE_LABELS: Record<SewaRole, string> = {
   Sewadal: "Sewadal",
   UnitIncharge: "Unit Incharge",
+  SahayakShikshak: "Sahayak Shikshak",
   SahayakShishika: "Sahayak Shishika",
   Shishika: "Shishika",
+  Shikshak: "Shikshak",
   KshetriyaSanchalak: "Kshetriya Sanchalak",
   Sanchalak: "Sanchalak",
 };
 
+export const REGISTRY_STATUSES = ["Registered", "Unregistered"] as const;
+export type RegistryStatus = (typeof REGISTRY_STATUSES)[number];
+
+export const REGISTRY_STATUS_LABELS: Record<RegistryStatus, string> = {
+  Registered: "Registered",
+  Unregistered: "Unregistered",
+};
+
+export function normalizeRegistryStatus(
+  value: string | null | undefined
+): RegistryStatus {
+  if (value && (REGISTRY_STATUSES as readonly string[]).includes(value)) {
+    return value as RegistryStatus;
+  }
+  return "Registered";
+}
+
 export const OFFICE_ROLE_ROWS: SewaRole[][] = [
   ["KshetriyaSanchalak", "Sanchalak"],
-  ["UnitIncharge"],
+  ["Shikshak", "SahayakShikshak"],
   ["Shishika", "SahayakShishika"],
+  ["UnitIncharge"],
 ];
 
 export function normalizeSewaRole(value: string | null | undefined): SewaRole {

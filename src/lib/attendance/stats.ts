@@ -36,10 +36,12 @@ export type GenderAttendanceBreakdown = {
 } & AttendanceTotals;
 
 export type MemberAttendanceRow = {
-  memberId: string;
+  memberId: number;
   fullName: string;
   unit: string;
   gender: string | null;
+  sewaRole?: string | null;
+  registryStatus?: string | null;
   status: AttendanceStatus | null;
   notes: string | null;
   sessions?: number;

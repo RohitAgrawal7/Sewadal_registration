@@ -27,6 +27,8 @@ import { UnitReassignDialog } from "@/components/members/UnitReassignDialog";
 import {
   BLOOD_GROUPS,
   QUALIFICATIONS,
+  REGISTRY_STATUSES,
+  REGISTRY_STATUS_LABELS,
   SEWA_ROLES,
   SEWA_ROLE_LABELS,
   SKILL_OPTIONS,
@@ -65,6 +67,7 @@ function emptyMemberValues(
     unitAssignedDate: today,
     role: "",
     sewaRole: "Sewadal",
+    registryStatus: "Registered",
     registrationDate: today,
     membershipStatus: MembershipStatus.Active,
     statusEffectiveDate: today,
@@ -122,12 +125,12 @@ export function MemberForm({
 }: {
   mode: "create" | "edit";
   defaultValues?: Partial<MemberFormValues>;
-  memberId?: string;
+  memberId?: string | number;
   memberName?: string;
   onCreated?: (
-    id: string,
+    id: number,
     member?: {
-      id: string;
+      id: number;
       fullName: string;
       unit: string;
       [key: string]: unknown;
@@ -198,16 +201,24 @@ export function MemberForm({
       toast.error("Profile photo must be an image");
       return;
     }
+    const name = (watch("fullName") || memberName || "").trim();
+    if (!name) {
+      toast.error("Enter the name first, then upload the photo");
+      return;
+    }
     setPhotoUploading(true);
     try {
       const body = new FormData();
       body.append("file", file);
+      body.append("kind", "photo");
+      body.append("name", name);
+      if (memberId) body.append("memberId", String(memberId));
       const res = await fetch("/api/uploads", { method: "POST", body });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
-      const url = data.photoUrl || data.url;
+      const url = `${data.photoUrl || data.url}?v=${Date.now()}`;
       setValue("photoUrl", url, { shouldValidate: true, shouldDirty: true });
-      toast.success("Profile photo added");
+      toast.success("Profile photo saved");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Upload failed");
     } finally {
@@ -216,16 +227,24 @@ export function MemberForm({
   }
 
   async function uploadIdentity(file: File) {
+    const name = (watch("fullName") || memberName || "").trim();
+    if (!name) {
+      toast.error("Enter the name first, then upload the identity doc");
+      return;
+    }
     setUploading(true);
     try {
       const body = new FormData();
       body.append("file", file);
+      body.append("kind", "identity");
+      body.append("name", name);
+      if (memberId) body.append("memberId", String(memberId));
       const res = await fetch("/api/uploads", { method: "POST", body });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
-      const url = data.url || data.photoUrl;
+      const url = `${data.url || data.photoUrl}?v=${Date.now()}`;
       setValue("identityDocUrl", url, { shouldValidate: true, shouldDirty: true });
-      toast.success("Document uploaded");
+      toast.success("Identity document saved");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Upload failed");
     } finally {
@@ -461,6 +480,23 @@ export function MemberForm({
           </FormRow>
 
           <FormRow
+            label="Registration"
+            required
+            error={errors.registryStatus?.message}
+          >
+            <Select
+              {...register("registryStatus")}
+              error={!!errors.registryStatus}
+            >
+              {REGISTRY_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {REGISTRY_STATUS_LABELS[status]}
+                </option>
+              ))}
+            </Select>
+          </FormRow>
+
+          <FormRow
             label="Date Of Joining"
             required
             error={errors.registrationDate?.message}
@@ -522,10 +558,10 @@ export function MemberForm({
             </p>
           )}
 
-          <FormRow label="Email" required error={errors.email?.message}>
+          <FormRow label="Email" error={errors.email?.message}>
             <Input
               type="email"
-              placeholder="Email"
+              placeholder="Optional — e.g. name@example.com"
               {...register("email")}
               error={!!errors.email}
             />

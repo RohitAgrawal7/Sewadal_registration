@@ -1,63 +1,31 @@
-import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
+import { readyPrisma } from "@/lib/prisma";
 
 const DEFAULT_USERNAME = "Sewadal2026";
 const DEFAULT_PASSWORD = "Jagruti@1";
 
 type UserRow = {
-  id: string;
+  id: number;
   username: string;
   passwordHash: string;
 };
 
-type UserDelegate = {
-  findUnique: (args: {
-    where: { username: string };
-  }) => Promise<UserRow | null>;
-  create: (args: {
-    data: { username: string; passwordHash: string };
-  }) => Promise<UserRow>;
-};
-
-function userDelegate(): UserDelegate | undefined {
-  return (prisma as unknown as { appUser?: UserDelegate }).appUser;
-}
-
 async function findUserByUsername(username: string): Promise<UserRow | null> {
-  const delegate = userDelegate();
-  if (delegate) {
-    return delegate.findUnique({ where: { username } });
-  }
-
-  const rows = await prisma.$queryRaw<UserRow[]>`
-    SELECT id, username, passwordHash
-    FROM AppUser
-    WHERE username = ${username}
-    LIMIT 1
-  `;
-  return rows[0] ?? null;
+  const db = await readyPrisma();
+  return db.appUser.findUnique({ where: { username } });
 }
 
 async function createUser(username: string, passwordHash: string): Promise<UserRow> {
-  const delegate = userDelegate();
-  if (delegate) {
-    return delegate.create({ data: { username, passwordHash } });
-  }
-
-  const id = randomUUID();
-  const now = new Date().toISOString();
-  await prisma.$executeRaw`
-    INSERT INTO AppUser (id, username, passwordHash, createdAt, updatedAt)
-    VALUES (${id}, ${username}, ${passwordHash}, ${now}, ${now})
-  `;
-  return { id, username, passwordHash };
+  const db = await readyPrisma();
+  return db.appUser.create({ data: { username, passwordHash } });
 }
 
 async function renameUser(fromUsername: string, toUsername: string) {
-  await prisma.$executeRaw`
-    UPDATE AppUser SET username = ${toUsername} WHERE username = ${fromUsername}
-  `;
+  const db = await readyPrisma();
+  await db.appUser.update({
+    where: { username: fromUsername },
+    data: { username: toUsername },
+  });
 }
 
 export async function ensureDefaultUser() {

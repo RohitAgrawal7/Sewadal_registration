@@ -14,6 +14,10 @@ const sans = Source_Sans_3({
 export const metadata: Metadata = {
   title: orgSettings.orgName,
   description: "Member registration and management",
+  icons: {
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }, { url: "/logo.png" }],
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({
@@ -24,7 +28,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${sans.variable} font-sans antialiased`}>
-        <Suspense fallback={<div className="h-[4.25rem] border-b border-slate-200 bg-white" />}>
+        <Suspense
+          fallback={
+            <div className="h-[4.25rem] border-b border-sky-200/70 bg-gradient-to-r from-sky-100 to-amber-100" />
+          }
+        >
           <AppHeader />
         </Suspense>
         <main>{children}</main>

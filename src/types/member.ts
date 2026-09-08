@@ -1,4 +1,4 @@
-import type { Member, UnitAssignmentLog } from "@prisma/client";
+import type { Member, UnitAssignmentLog } from "@/generated/prisma";
 import type { MemberWithDerived } from "@/lib/dates";
 
 export type MemberWithLogs = Member & {

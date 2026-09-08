@@ -30,7 +30,7 @@ import { genderColors } from "@/lib/gender-colors";
 import { cn } from "@/lib/utils";
 
 export type SearchMember = {
-  id: string;
+  id: number;
   fullName: string;
   preferredName: string | null;
   gender: string | null;
@@ -41,6 +41,8 @@ export type SearchMember = {
   unit: string;
   dateOfBirth: Date | string;
   membershipStatus?: string;
+  sewaRole?: string | null;
+  registryStatus?: string | null;
 };
 
 function matchesName(member: SearchMember, query: string): boolean {
@@ -155,7 +157,7 @@ export function AttendanceEntryForm({
   const wrapRef = useRef<HTMLDivElement>(null);
 
   const [nameQuery, setNameQuery] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [gender, setGender] = useState("");
   const [phone, setPhone] = useState("");
@@ -237,6 +239,10 @@ export function AttendanceEntryForm({
               fullName: nameQuery.trim(),
               unit,
               gender: gender || null,
+              sewaRole: members.find((m) => m.id === selectedId)?.sewaRole ?? "Sewadal",
+              registryStatus:
+                members.find((m) => m.id === selectedId)?.registryStatus ??
+                "Registered",
               status: AttendanceStatus.Present,
               notes: null,
             });
@@ -264,6 +270,8 @@ export function AttendanceEntryForm({
             fullName: nameQuery.trim(),
             unit,
             gender: gender || null,
+            sewaRole: "Sewadal",
+            registryStatus: "Registered",
             status: AttendanceStatus.Present,
             notes: null,
           });

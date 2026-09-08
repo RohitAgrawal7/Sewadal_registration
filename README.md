@@ -1,6 +1,6 @@
 # Member Registration & Management
 
-Next.js 14 (App Router) internal tool for registering and managing members, with a birthday-first dashboard and auditable unit assignments.
+Next.js 14 (App Router) Sant Niranakri Mission for registering and managing members, with a birthday-first dashboard and auditable unit assignments.
 
 ## Stack
 

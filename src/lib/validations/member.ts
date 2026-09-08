@@ -9,7 +9,7 @@ import {
   Unit,
   UNITS,
 } from "@/lib/enums";
-import { SEWA_ROLES, type SewaRole } from "@/lib/sewadaar";
+import { SEWA_ROLES, REGISTRY_STATUSES, type SewaRole, type RegistryStatus } from "@/lib/sewadaar";
 
 const phoneRegex = /^\+?[\d\s()-]{7,20}$/;
 
@@ -38,7 +38,15 @@ export const memberFormSchema = z.object({
   nationalIdNumber: z.string().optional().or(z.literal("")),
   photoUrl: z.string().optional().or(z.literal("")),
 
-  email: z.string().min(1, "Email is required").email("Invalid email"),
+  email: z
+    .string()
+    .trim()
+    .optional()
+    .or(z.literal(""))
+    .refine(
+      (v) => !v || z.string().email().safeParse(v).success,
+      "Invalid email"
+    ),
   phonePrimary: z
     .string()
     .min(1, "Primary phone is required")
@@ -66,6 +74,10 @@ export const memberFormSchema = z.object({
   sewaRole: z.enum(SEWA_ROLES as unknown as [SewaRole, ...SewaRole[]], {
     required_error: "Sewa role is required",
   }),
+  registryStatus: z.enum(
+    REGISTRY_STATUSES as unknown as [RegistryStatus, ...RegistryStatus[]],
+    { required_error: "Registration status is required" }
+  ),
 
   registrationDate: z.string().min(1, "Registration date is required"),
   membershipStatus: z.enum(

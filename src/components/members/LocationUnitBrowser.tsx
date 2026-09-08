@@ -15,17 +15,17 @@ export function LocationBanner({
 }) {
   const body = (
     <>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-300">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-800/80">
         Location
       </p>
-      <h2 className="mt-1 text-xl font-bold tracking-tight sm:text-2xl">
+      <h2 className="mt-1 text-xl font-bold tracking-tight text-slate-800 sm:text-2xl">
         {orgSettings.locationName}
       </h2>
-      <p className="mt-1 text-sm text-slate-300">
+      <p className="mt-1 text-sm text-slate-600">
         {memberCount} members · {ALL_UNITS.length} units
       </p>
       {href && (
-        <p className="mt-3 text-sm font-semibold text-white/90">
+        <p className="mt-3 text-sm font-semibold text-amber-800">
           Open location →
         </p>
       )}
@@ -33,11 +33,11 @@ export function LocationBanner({
   );
 
   const className =
-    "block rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-900 to-slate-700 px-4 py-4 text-white shadow-sm sm:px-5";
+    "block rounded-2xl border border-sky-200/80 bg-gradient-to-br from-sky-50 via-white to-amber-50 px-4 py-4 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_10px_28px_rgba(37,99,235,0.1)] sm:px-5";
 
   if (href) {
     return (
-      <Link href={href} className={`${className} transition hover:from-slate-800 hover:to-slate-600`}>
+      <Link href={href} className={`${className} transition hover:border-sky-300 hover:shadow-[0_1px_0_rgba(255,255,255,0.95)_inset,0_14px_32px_rgba(37,99,235,0.14)]`}>
         {body}
       </Link>
     );

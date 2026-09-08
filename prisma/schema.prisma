@@ -1,16 +1,18 @@
 generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "darwin-arm64", "debian-openssl-3.0.x", "rhel-openssl-3.0.x"]
+  provider        = "prisma-client-js"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["multiSchema"]
+  binaryTargets   = ["native", "darwin-arm64", "debian-openssl-3.0.x", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "sqlite"
-  // Relative to this schema file → prisma/dev.db (no DATABASE_URL required at build)
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["sewadal"]
 }
 
 model Member {
-  id                    String   @id @default(uuid())
+  id                    Int      @id @default(autoincrement())
   fullName              String
   preferredName         String?
   gender                String?
@@ -19,7 +21,7 @@ model Member {
   nationalIdNumber      String?
   photoUrl              String?
 
-  email                 String   @unique
+  email                 String?  @unique
   phonePrimary          String
   phoneSecondary        String?
   address               String
@@ -34,6 +36,7 @@ model Member {
   unitAssignedDate      DateTime
   role                  String?
   sewaRole              String   @default("Sewadal")
+  registryStatus        String   @default("Registered")
   fatherHusbandName     String?
   qualification         String?
   profession            String?
@@ -51,22 +54,25 @@ model Member {
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+
+  @@schema("sewadal")
 }
 
 model UnitAssignmentLog {
-  id        String    @id @default(uuid())
-  memberId  String
+  id        Int       @id @default(autoincrement())
+  memberId  Int
   member    Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
   unit      String
   startDate DateTime
   endDate   DateTime?
 
   @@index([memberId])
+  @@schema("sewadal")
 }
 
 model AttendanceRecord {
-  id        String   @id @default(uuid())
-  memberId  String
+  id        Int      @id @default(autoincrement())
+  memberId  Int
   member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
   date      DateTime
   status    String
@@ -77,22 +83,27 @@ model AttendanceRecord {
   @@unique([memberId, date])
   @@index([date])
   @@index([memberId])
+  @@schema("sewadal")
 }
 
 model AttendanceSession {
-  id            String   @id @default(uuid())
+  id            Int      @id @default(autoincrement())
   date          DateTime @unique
   topic         String?
   sanchalanSewa String?
   stageSewa     String?
   updatedAt     DateTime @updatedAt
   createdAt     DateTime @default(now())
+
+  @@schema("sewadal")
 }
 
 model AppUser {
-  id           String   @id @default(uuid())
+  id           Int      @id @default(autoincrement())
   username     String   @unique
   passwordHash String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@schema("sewadal")
 }

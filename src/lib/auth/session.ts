@@ -10,7 +10,9 @@ export type SessionUser = {
 
 function secretKey() {
   const secret =
-    process.env.SESSION_SECRET || "local-dev-swaadal-session-secret";
+    process.env.SESSION_SECRET ||
+    process.env.AUTH_SECRET ||
+    "local-dev-swaadal-session-secret";
   return new TextEncoder().encode(secret);
 }
 

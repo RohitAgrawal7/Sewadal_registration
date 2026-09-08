@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { safeReturnPath } from "@/lib/return-path";
-import type { Member, UnitAssignmentLog } from "@prisma/client";
+import type { Member, UnitAssignmentLog } from "@/generated/prisma";
 import type { MemberWithDerived } from "@/lib/dates";
 import { formatDateInput } from "@/lib/utils";
 import { MemberProfileHeader } from "@/components/members/MemberProfileHeader";
@@ -23,7 +23,7 @@ function toFormValues(member: Detail): MemberFormValues {
     nationalIdType: member.nationalIdType as NationalIdType,
     nationalIdNumber: member.nationalIdNumber ?? "",
     photoUrl: member.photoUrl ?? "",
-    email: member.email,
+    email: member.email ?? "",
     phonePrimary: member.phonePrimary,
     phoneSecondary: member.phoneSecondary ?? "",
     address: member.address,
@@ -37,6 +37,9 @@ function toFormValues(member: Detail): MemberFormValues {
     unitAssignedDate: formatDateInput(member.unitAssignedDate),
     role: member.role ?? "",
     sewaRole: (member.sewaRole as MemberFormValues["sewaRole"]) || "Sewadal",
+    registryStatus:
+      (member.registryStatus as MemberFormValues["registryStatus"]) ||
+      "Registered",
     registrationDate: formatDateInput(member.registrationDate),
     membershipStatus: member.membershipStatus as MembershipStatus,
     statusEffectiveDate: formatDateInput(member.statusEffectiveDate),
@@ -104,7 +107,9 @@ export function MemberProfileClient({ member }: { member: Detail }) {
             </div>
             <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between sm:gap-4">
               <dt className="text-slate-400">Email</dt>
-              <dd className="break-all text-slate-800 sm:text-right">{member.email}</dd>
+              <dd className="break-all text-slate-800 sm:text-right">
+                {member.email || "—"}
+              </dd>
             </div>
             {member.bloodGroup && (
               <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between sm:gap-4">

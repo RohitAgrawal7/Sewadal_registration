@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { Member } from "@prisma/client";
+import type { Member } from "@/generated/prisma";
 import type { MemberWithDerived } from "@/lib/dates";
 import { hydrateMember } from "@/lib/dates";
 import { fetchMembersSnapshot } from "@/lib/members/actions";

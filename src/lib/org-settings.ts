@@ -2,7 +2,7 @@ export const orgSettings = {
   defaultCountry: "India",
   defaultState: "Maharashtra",
   minimumAge: 16,
-  orgName: "Member Registry",
+  orgName: "Sewadal Management Sewa",
   locationName: "Chhatrapati Sambhaji Nagar",
   locationSlug: "chhatrapati-sambhaji-nagar",
   khetra: "Chhatrapati Sambhaji Nagar",

@@ -3,7 +3,6 @@
   publish = ".next"
 
 [build.environment]
-  # Runtime on serverless uses /tmp via src/lib/prisma.ts
-  DATABASE_URL = "file:./dev.db"
+  # Set DATABASE_URL, SESSION_SECRET / AUTH_SECRET, AUTH_USERNAME, AUTH_PASSWORD
+  # in the Netlify / Vercel dashboard (Supabase Postgres). Do not hardcode secrets here.
   PRISMA_CLI_BINARY_TARGETS = "native,debian-openssl-3.0.x,rhel-openssl-3.0.x"
-  SESSION_SECRET = "swaadal-session-change-me-in-netlify"

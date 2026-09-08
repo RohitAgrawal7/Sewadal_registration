@@ -32,7 +32,7 @@ export async function loginAction(
   }
 
   const token = await createSessionToken({
-    id: user.id,
+    id: String(user.id),
     username: user.username,
   });
   cookies().set(SESSION_COOKIE, token, sessionCookieOptions());

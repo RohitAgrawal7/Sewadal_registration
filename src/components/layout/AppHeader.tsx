@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { orgSettings } from "@/lib/org-settings";
@@ -46,17 +47,27 @@ export function AppHeader() {
   if (pathname === "/login") return null;
 
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/95 backdrop-blur-md supports-[padding:max(0px)]:pt-[env(safe-area-inset-top)]">
+    <header className="sticky top-0 z-30 border-b border-sky-200/70 bg-gradient-to-r from-sky-100 via-white to-amber-100/90 backdrop-blur-md supports-[padding:max(0px)]:pt-[env(safe-area-inset-top)]">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:gap-4 sm:px-6 sm:py-3.5">
         <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
           <PageBackButton className="hidden shrink-0 sm:inline-flex" />
-          <Link href="/" className="group min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400 sm:text-[11px]">
-              Internal tool
-            </p>
-            <h1 className="truncate text-base font-bold tracking-tight text-slate-900 transition group-hover:text-slate-700 sm:text-xl">
-              {orgSettings.orgName}
-            </h1>
+          <Link href="/" className="group flex min-w-0 items-center gap-2.5">
+            <Image
+              src="/logo.png"
+              alt=""
+              width={36}
+              height={36}
+              className="h-9 w-9 shrink-0 rounded-xl object-cover shadow-sm ring-1 ring-teal-200/80"
+              priority
+            />
+            <span className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-800/80 sm:text-[11px]">
+                Sant Niranakri Mission
+              </p>
+              <h1 className="truncate text-base font-bold tracking-tight text-slate-800 transition group-hover:text-sky-900 sm:text-xl">
+                {orgSettings.orgName}
+              </h1>
+            </span>
           </Link>
         </div>
 
@@ -70,8 +81,8 @@ export function AppHeader() {
                 className={cn(
                   "rounded-lg px-3 py-2 text-sm font-medium transition",
                   active
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                    ? "bg-gradient-to-r from-sky-600 to-blue-700 text-white shadow-sm"
+                    : "text-slate-600 hover:bg-sky-100/80 hover:text-sky-900"
                 )}
               >
                 {link.label}
@@ -80,14 +91,14 @@ export function AppHeader() {
           })}
           <Link
             href="/members/new"
-            className="rounded-lg bg-slate-900 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+            className="rounded-lg bg-gradient-to-r from-amber-600 to-orange-700 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:from-amber-500 hover:to-orange-600"
           >
             Register
           </Link>
           <form action={logoutAction}>
             <button
               type="submit"
-              className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+              className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-white/80 hover:text-slate-900"
             >
               Logout
             </button>
@@ -97,13 +108,13 @@ export function AppHeader() {
         <div className="flex shrink-0 items-center gap-2 md:hidden">
           <Link
             href="/members/new"
-            className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
+            className="rounded-lg bg-gradient-to-r from-amber-600 to-orange-700 px-3 py-2 text-sm font-semibold text-white"
           >
             Register
           </Link>
           <button
             type="button"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-teal-200 bg-white/90 text-slate-700"
             aria-expanded={menuOpen}
             aria-label={menuOpen ? "Close menu" : "Open menu"}
             onClick={() => setMenuOpen((open) => !open)}
@@ -122,7 +133,7 @@ export function AppHeader() {
       </div>
 
       {menuOpen && (
-        <div className="border-t border-slate-200 bg-white md:hidden">
+        <div className="border-t border-sky-100 bg-gradient-to-b from-sky-50 to-amber-50/60 md:hidden">
           <nav className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-3">
             <div className="mb-1 sm:hidden">
               <PageBackButton className="w-full justify-center" />
@@ -136,8 +147,8 @@ export function AppHeader() {
                   className={cn(
                     "rounded-lg px-3 py-3 text-sm font-medium",
                     active
-                      ? "bg-slate-900 text-white"
-                      : "text-slate-700 hover:bg-slate-100"
+                      ? "bg-gradient-to-r from-sky-600 to-blue-700 text-white"
+                      : "text-slate-700 hover:bg-white"
                   )}
                 >
                   {link.label}
@@ -147,7 +158,7 @@ export function AppHeader() {
             <form action={logoutAction} className="mt-1">
               <button
                 type="submit"
-                className="w-full rounded-lg px-3 py-3 text-left text-sm font-medium text-slate-600 hover:bg-slate-100"
+                className="w-full rounded-lg px-3 py-3 text-left text-sm font-medium text-slate-600 hover:bg-white"
               >
                 Logout
               </button>

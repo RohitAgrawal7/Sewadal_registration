@@ -20,7 +20,7 @@ function formatDate(
 import { toast } from "sonner";
 import { EMPTY_ATTENDANCE, type MemberWithDerived } from "@/lib/dates";
 import type { Unit } from "@/lib/enums";
-import { ALL_UNITS } from "@/lib/unit-colors";
+import { ALL_UNITS, UNIT_LABELS } from "@/lib/unit-colors";
 import { GENDERS, MembershipStatus } from "@/lib/enums";
 import { GENDER_LABELS } from "@/lib/validations/member";
 import { UnitBadge } from "@/components/ui/UnitBadge";
@@ -40,9 +40,14 @@ import { paginate, parsePageSize } from "@/lib/pagination";
 import { deactivateMember } from "@/lib/members/actions";
 import { cn } from "@/lib/utils";
 import {
+  BLOOD_GROUPS,
   OFFICE_ROLE_ROWS,
+  REGISTRY_STATUSES,
+  REGISTRY_STATUS_LABELS,
+  SEWA_ROLES,
   SEWA_ROLE_LABELS,
   isSewadal,
+  normalizeRegistryStatus,
   normalizeSewaRole,
   type SewaRole,
 } from "@/lib/sewadaar";
@@ -54,6 +59,35 @@ type SortKey =
   | "birthday"
   | "unit"
   | "status";
+
+const AGE_FILTERS = [
+  { value: "under18", label: "Under 18" },
+  { value: "18-25", label: "18 – 25" },
+  { value: "26-35", label: "26 – 35" },
+  { value: "36-50", label: "36 – 50" },
+  { value: "51plus", label: "51+" },
+] as const;
+
+type AgeFilter = (typeof AGE_FILTERS)[number]["value"];
+
+function matchesAgeFilter(age: number | undefined, filter: string): boolean {
+  if (!filter) return true;
+  if (age == null || Number.isNaN(age)) return false;
+  switch (filter as AgeFilter) {
+    case "under18":
+      return age < 18;
+    case "18-25":
+      return age >= 18 && age <= 25;
+    case "26-35":
+      return age >= 26 && age <= 35;
+    case "36-50":
+      return age >= 36 && age <= 50;
+    case "51plus":
+      return age >= 51;
+    default:
+      return true;
+  }
+}
 
 function parseSort(value: string | null): SortKey {
   if (
@@ -68,7 +102,7 @@ function parseSort(value: string | null): SortKey {
   return "name";
 }
 
-function memberHref(id: string, from: string, edit = false) {
+function memberHref(id: string | number, from: string, edit = false) {
   const params = new URLSearchParams();
   if (edit) params.set("edit", "1");
   params.set("from", from);
@@ -90,12 +124,16 @@ export function MemberTable({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
-  const [deactivateId, setDeactivateId] = useState<string | null>(null);
+  const [deactivateId, setDeactivateId] = useState<number | null>(null);
   const [deactivating, setDeactivating] = useState(false);
 
   const q = searchParams.get("q") ?? "";
   const unit = searchParams.get("unit") ?? "";
   const gender = searchParams.get("gender") ?? "";
+  const sewaRole = searchParams.get("sewaRole") ?? "";
+  const registry = searchParams.get("registry") ?? "";
+  const age = searchParams.get("age") ?? "";
+  const bloodGroup = searchParams.get("bloodGroup") ?? "";
   const sort = parseSort(searchParams.get("sort"));
   const dir = searchParams.get("dir") === "desc" ? "desc" : "asc";
   const pageSize = parsePageSize(searchParams.get("pageSize"));
@@ -109,9 +147,18 @@ export function MemberTable({
       if (value === null || value === "") params.delete(key);
       else params.set(key, value);
     }
-    const resetsPage = ["q", "gender", "unit", "sort", "dir", "pageSize"].some(
-      (key) => key in patch
-    );
+    const resetsPage = [
+      "q",
+      "gender",
+      "unit",
+      "sewaRole",
+      "registry",
+      "age",
+      "bloodGroup",
+      "sort",
+      "dir",
+      "pageSize",
+    ].some((key) => key in patch);
     if (resetsPage && !("page" in patch)) params.delete("page");
     startTransition(() => {
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
@@ -127,14 +174,16 @@ export function MemberTable({
   }
 
   const filtered = useMemo(() => {
-    let list = members.filter((m) => isSewadal(m.sewaRole));
+    let list = sewaRole
+      ? members.filter((m) => normalizeSewaRole(m.sewaRole) === sewaRole)
+      : members.filter((m) => isSewadal(m.sewaRole));
 
     if (q.trim()) {
       const needle = q.trim().toLowerCase();
       list = list.filter(
         (m) =>
           m.fullName.toLowerCase().includes(needle) ||
-          m.email.toLowerCase().includes(needle) ||
+          m.email?.toLowerCase().includes(needle) ||
           m.phonePrimary.includes(needle) ||
           (m.preferredName?.toLowerCase().includes(needle) ?? false)
       );
@@ -142,6 +191,17 @@ export function MemberTable({
     const unitFilter = lockedUnit || unit;
     if (unitFilter) list = list.filter((m) => m.unit === unitFilter);
     if (gender) list = list.filter((m) => m.gender === gender);
+    if (registry) {
+      list = list.filter(
+        (m) => normalizeRegistryStatus(m.registryStatus) === registry
+      );
+    }
+    if (age) {
+      list = list.filter((m) => matchesAgeFilter(m.derived?.age, age));
+    }
+    if (bloodGroup) {
+      list = list.filter((m) => m.bloodGroup === bloodGroup);
+    }
 
     list.sort((a, b) => {
       let cmp = 0;
@@ -180,6 +240,10 @@ export function MemberTable({
     q,
     unit,
     gender,
+    sewaRole,
+    registry,
+    age,
+    bloodGroup,
     sort,
     dir,
   ]);
@@ -204,10 +268,23 @@ export function MemberTable({
   );
 
   const officeMembers = useMemo(() => {
+    // When a specific sewa role is filtered, results go in the main list only.
+    if (sewaRole) return [];
     let list = members.filter((m) => !isSewadal(m.sewaRole));
     const unitFilter = lockedUnit || unit;
     if (unitFilter) list = list.filter((m) => m.unit === unitFilter);
     if (gender) list = list.filter((m) => m.gender === gender);
+    if (registry) {
+      list = list.filter(
+        (m) => normalizeRegistryStatus(m.registryStatus) === registry
+      );
+    }
+    if (age) {
+      list = list.filter((m) => matchesAgeFilter(m.derived?.age, age));
+    }
+    if (bloodGroup) {
+      list = list.filter((m) => m.bloodGroup === bloodGroup);
+    }
     if (q.trim()) {
       const needle = q.trim().toLowerCase();
       list = list.filter(
@@ -217,7 +294,9 @@ export function MemberTable({
       );
     }
     return list;
-  }, [members, lockedUnit, unit, gender, q]);
+  }, [members, lockedUnit, unit, gender, sewaRole, registry, age, bloodGroup, q]);
+
+  const showOfficeBearers = !sewaRole;
 
   const deactivateTarget = members.find((m) => m.id === deactivateId);
 
@@ -277,7 +356,7 @@ export function MemberTable({
             />
           )}
 
-      <div className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:grid-cols-2">
+      <div className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
           Search
           <Input
@@ -287,7 +366,7 @@ export function MemberTable({
           />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-          Gender
+          Type
           <Select
             value={gender}
             onChange={(e) => updateParams({ gender: e.target.value || null })}
@@ -300,8 +379,83 @@ export function MemberTable({
             ))}
           </Select>
         </label>
+        {!lockedUnit && (
+          <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+            Unit
+            <Select
+              value={unit}
+              onChange={(e) => updateParams({ unit: e.target.value || null })}
+            >
+              <option value="">All units</option>
+              {ALL_UNITS.map((u) => (
+                <option key={u} value={u}>
+                  {UNIT_LABELS[u]}
+                </option>
+              ))}
+            </Select>
+          </label>
+        )}
+        <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+          Age
+          <Select
+            value={age}
+            onChange={(e) => updateParams({ age: e.target.value || null })}
+          >
+            <option value="">All ages</option>
+            {AGE_FILTERS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+          Blood group
+          <Select
+            value={bloodGroup}
+            onChange={(e) =>
+              updateParams({ bloodGroup: e.target.value || null })
+            }
+          >
+            <option value="">All groups</option>
+            {BLOOD_GROUPS.map((group) => (
+              <option key={group} value={group}>
+                {group}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+          Sewa role
+          <Select
+            value={sewaRole}
+            onChange={(e) => updateParams({ sewaRole: e.target.value || null })}
+          >
+            <option value="">All roles</option>
+            {SEWA_ROLES.map((role) => (
+              <option key={role} value={role}>
+                {SEWA_ROLE_LABELS[role]}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+          Registration
+          <Select
+            value={registry}
+            onChange={(e) => updateParams({ registry: e.target.value || null })}
+          >
+            <option value="">All</option>
+            {REGISTRY_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {REGISTRY_STATUS_LABELS[status]}
+              </option>
+            ))}
+          </Select>
+        </label>
       </div>
 
+      {showOfficeBearers && (
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 bg-slate-50 px-3 py-2.5 sm:px-4">
           <h3 className="text-sm font-semibold text-slate-800">
@@ -355,6 +509,7 @@ export function MemberTable({
           ))}
         </div>
       </div>
+      )}
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {filtered.length === 0 ? (

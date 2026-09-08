@@ -1,8 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { randomUUID } from "crypto";
-import { prisma } from "@/lib/prisma";
+import { readyPrisma } from "@/lib/prisma";
 import {
   AttendanceStatus,
   ATTENDANCE_STATUSES,
@@ -13,9 +12,10 @@ import {
 } from "@/lib/enums";
 import { parseDateKey } from "@/lib/attendance/date-utils";
 import { orgSettings } from "@/lib/org-settings";
+import { parseMemberId } from "@/lib/members/ids";
 
 export type AttendanceMarkInput = {
-  memberId: string;
+  memberId: number;
   status: AttendanceStatus;
   notes?: string;
 };
@@ -30,6 +30,38 @@ export type QuickMemberInput = {
   status?: AttendanceStatus;
 };
 
+function attendanceError(e: unknown, fallback: string): string {
+  const message =
+    e && typeof e === "object" && "message" in e && typeof e.message === "string"
+      ? e.message
+      : "";
+  if (/Unique constraint|P2002/i.test(message)) {
+    return "Attendance already recorded for this member and date";
+  }
+  if (/Foreign key|P2003/i.test(message)) {
+    return "Member not found. Refresh and try again.";
+  }
+  if (/DATABASE_URL|Can't reach|P1001|P1017/i.test(message)) {
+    return "Database connection failed. Check DATABASE_URL and try again.";
+  }
+  return fallback;
+}
+
+function softRevalidate(...paths: Array<string | [string, "layout"]>) {
+  try {
+    for (const path of paths) {
+      if (Array.isArray(path)) revalidatePath(path[0], path[1]);
+      else revalidatePath(path);
+    }
+  } catch (error) {
+    console.warn("revalidatePath skipped", error);
+  }
+}
+
+function toMemberId(value: string | number): number | null {
+  return parseMemberId(value);
+}
+
 export async function saveAttendanceForDate(
   dateKey: string,
   marks: AttendanceMarkInput[]
@@ -38,18 +70,26 @@ export async function saveAttendanceForDate(
     return { success: false, error: "Invalid date" };
   }
 
+  if (!marks.length) {
+    return { success: false, error: "Mark at least one member before saving" };
+  }
+
   const day = parseDateKey(dateKey);
 
   for (const mark of marks) {
+    if (!Number.isInteger(mark.memberId) || mark.memberId <= 0) {
+      return { success: false, error: "Missing member id" };
+    }
     if (!(ATTENDANCE_STATUSES as string[]).includes(mark.status)) {
       return { success: false, error: `Invalid status for member ${mark.memberId}` };
     }
   }
 
   try {
-    await prisma.$transaction(
-      marks.map((mark) =>
-        prisma.attendanceRecord.upsert({
+    const db = await readyPrisma();
+    await db.$transaction(async (tx) => {
+      for (const mark of marks) {
+        await tx.attendanceRecord.upsert({
           where: {
             memberId_date: {
               memberId: mark.memberId,
@@ -67,58 +107,68 @@ export async function saveAttendanceForDate(
             notes: mark.notes?.trim() || null,
             markedAt: new Date(),
           },
-        })
-      )
-    );
+        });
+      }
+    });
 
-    revalidatePath("/attendance");
-    revalidatePath("/");
+    softRevalidate("/attendance", "/");
     return { success: true };
-  } catch {
-    return { success: false, error: "Failed to save attendance" };
+  } catch (e) {
+    console.error("saveAttendanceForDate failed", e);
+    return { success: false, error: attendanceError(e, "Failed to save attendance") };
   }
 }
 
 export async function markAllForDate(
   dateKey: string,
-  memberIds: string[],
+  memberIds: Array<string | number>,
   status: AttendanceStatus
 ): Promise<{ success: true } | { success: false; error: string }> {
+  const ids = memberIds
+    .map((id) => toMemberId(id))
+    .filter((id): id is number => id != null);
   return saveAttendanceForDate(
     dateKey,
-    memberIds.map((memberId) => ({ memberId, status }))
+    ids.map((memberId) => ({ memberId, status }))
   );
 }
 
 export async function markMemberPresent(
   dateKey: string,
-  memberId: string
+  memberId: string | number
 ): Promise<{ success: true } | { success: false; error: string }> {
+  const id = toMemberId(memberId);
+  if (!id) return { success: false, error: "Member not found" };
   return saveAttendanceForDate(dateKey, [
-    { memberId, status: AttendanceStatus.Present },
+    { memberId: id, status: AttendanceStatus.Present },
   ]);
 }
 
 export async function clearAttendanceForDate(
   dateKey: string,
-  memberIds?: string[]
+  memberIds?: Array<string | number>
 ): Promise<{ success: true } | { success: false; error: string }> {
   if (!dateKey || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
     return { success: false, error: "Invalid date" };
   }
   const day = parseDateKey(dateKey);
+  const ids = memberIds
+    ?.map((id) => toMemberId(id))
+    .filter((id): id is number => id != null);
 
   try {
-    await prisma.attendanceRecord.deleteMany({
+    const db = await readyPrisma();
+    await db.attendanceRecord.deleteMany({
       where: {
         date: day,
-        ...(memberIds?.length ? { memberId: { in: memberIds } } : {}),
+        ...(ids?.length ? { memberId: { in: ids } } : {}),
       },
     });
-    revalidatePath("/attendance");
+    softRevalidate("/attendance");
     return { success: true };
-  } catch {
-    return { success: false, error: "Failed to clear attendance" };
+  } catch (e) {
+    console.error("clearAttendanceForDate failed", e);
+    return { success: false, error: attendanceError(e, "Failed to clear attendance") };
   }
 }
 
@@ -132,7 +182,8 @@ export async function saveAttendanceSession(
   const day = parseDateKey(dateKey);
 
   try {
-    await prisma.attendanceSession.upsert({
+    const db = await readyPrisma();
+    await db.attendanceSession.upsert({
       where: { date: day },
       create: {
         date: day,
@@ -146,10 +197,11 @@ export async function saveAttendanceSession(
         stageSewa: data.stageSewa?.trim() || null,
       },
     });
-    revalidatePath("/attendance");
+    softRevalidate("/attendance");
     return { success: true };
-  } catch {
-    return { success: false, error: "Failed to save session" };
+  } catch (e) {
+    console.error("saveAttendanceSession failed", e);
+    return { success: false, error: attendanceError(e, "Failed to save session") };
   }
 }
 
@@ -158,7 +210,7 @@ export async function quickAddMemberAndMark(
   dateKey: string,
   input: QuickMemberInput
 ): Promise<
-  | { success: true; id: string; created: true }
+  | { success: true; id: number; created: true }
   | { success: false; error: string }
 > {
   const name = input.fullName.trim();
@@ -187,19 +239,17 @@ export async function quickAddMemberAndMark(
 
   const phone = input.phone?.trim() || "0000000000";
   const addressLine = input.address?.trim() || "—";
-  const id = randomUUID();
-  const email = `member.${id.slice(0, 8)}@local.registry`;
 
   try {
-    await prisma.$transaction(async (tx) => {
-      await tx.member.create({
+    const db = await readyPrisma();
+    const created = await db.$transaction(async (tx) => {
+      const member = await tx.member.create({
         data: {
-          id,
           fullName: name,
           gender: input.gender,
           dateOfBirth: dob,
           nationalIdType: "Other",
-          email,
+          email: `pending.${Date.now()}@local.registry`,
           phonePrimary: phone,
           address: addressLine,
           city: addressLine.includes(",")
@@ -214,6 +264,8 @@ export async function quickAddMemberAndMark(
           registrationDate: day,
           membershipStatus: MembershipStatus.Active,
           statusEffectiveDate: day,
+          sewaRole: "Sewadal",
+          registryStatus: "Registered",
           unitHistory: {
             create: {
               unit: input.unit,
@@ -224,20 +276,26 @@ export async function quickAddMemberAndMark(
         },
       });
 
+      await tx.member.update({
+        where: { id: member.id },
+        data: { email: `member.${member.id}@local.registry` },
+      });
+
       await tx.attendanceRecord.create({
         data: {
-          memberId: id,
+          memberId: member.id,
           date: day,
           status,
         },
       });
+
+      return member;
     });
 
-    revalidatePath("/attendance");
-    revalidatePath("/lists", "layout");
-    revalidatePath("/");
-    return { success: true, id, created: true };
-  } catch {
-    return { success: false, error: "Failed to add member" };
+    softRevalidate("/attendance", "/", ["/lists", "layout"]);
+    return { success: true, id: created.id, created: true };
+  } catch (e) {
+    console.error("quickAddMemberAndMark failed", e);
+    return { success: false, error: attendanceError(e, "Failed to add member") };
   }
 }

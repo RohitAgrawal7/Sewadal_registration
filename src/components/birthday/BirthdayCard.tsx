@@ -32,8 +32,8 @@ export function BirthdayCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             {variant === "today" && (
-              <span className="text-base" aria-hidden>
-                🎂
+              <span className="rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                Today
               </span>
             )}
             <h3 className="truncate font-bold text-slate-900">

@@ -48,7 +48,7 @@ type RangePayload = {
     } & AttendanceTotals
   >;
   memberStats: Array<{
-    memberId: string;
+    memberId: number;
     fullName: string;
     unit: string;
     gender: string | null;

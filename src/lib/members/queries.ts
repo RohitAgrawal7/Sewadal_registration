@@ -3,7 +3,7 @@ import { withDerived, type MemberAttendanceStats } from "@/lib/dates";
 import type { Unit } from "@/lib/enums";
 import { MembershipStatus, UNITS, MEMBERSHIP_STATUSES } from "@/lib/enums";
 import { startOfMonth, endOfMonth } from "date-fns";
-import type { Member } from "@prisma/client";
+import type { Member } from "@/generated/prisma";
 
 function isUnit(value: string): value is Unit {
   return (UNITS as string[]).includes(value);
@@ -14,7 +14,7 @@ async function attendanceByMemberId() {
     by: ["memberId", "status"],
     _count: { _all: true },
   });
-  const map = new Map<string, { attended: number; absent: number }>();
+  const map = new Map<number, { attended: number; absent: number }>();
   for (const row of grouped) {
     const cur = map.get(row.memberId) ?? { attended: 0, absent: 0 };
     if (row.status === "Present" || row.status === "Late") {
@@ -27,7 +27,7 @@ async function attendanceByMemberId() {
   return map;
 }
 
-function withAttendance(member: Member, map: Map<string, { attended: number; absent: number }>) {
+function withAttendance(member: Member, map: Map<number, { attended: number; absent: number }>) {
   const c = map.get(member.id) ?? { attended: 0, absent: 0 };
   const recorded = c.attended + c.absent;
   const attendance: MemberAttendanceStats = {
@@ -49,9 +49,12 @@ export async function getAllMembers() {
   return members.map((m) => withAttendance(m, attendanceMap));
 }
 
-export async function getMemberById(id: string) {
+export async function getMemberById(id: string | number) {
+  const { parseMemberId } = await import("@/lib/members/ids");
+  const numericId = parseMemberId(id);
+  if (!numericId) return null;
   const member = await prisma.member.findUnique({
-    where: { id },
+    where: { id: numericId },
     include: {
       unitHistory: { orderBy: { startDate: "desc" } },
     },

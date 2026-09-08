@@ -45,6 +45,8 @@ export async function getMembersForSearch() {
       unit: true,
       dateOfBirth: true,
       membershipStatus: true,
+      sewaRole: true,
+      registryStatus: true,
     },
     orderBy: { fullName: "asc" },
   });
@@ -64,23 +66,24 @@ export async function getAttendanceForDate(dateKeyStr: string, unit?: Unit | "al
   const day = parseDateKey(dateKeyStr);
   const members = await getActiveMembers(unit);
   const memberIds = members.map((m) => m.id);
+  const emptyGuard = memberIds.length ? memberIds : [-1];
   const [records, lifetime] = await Promise.all([
     prisma.attendanceRecord.findMany({
       where: {
         date: day,
-        memberId: { in: memberIds.length ? memberIds : ["__none__"] },
+        memberId: { in: emptyGuard },
       },
     }),
     prisma.attendanceRecord.groupBy({
       by: ["memberId", "status"],
       where: {
-        memberId: { in: memberIds.length ? memberIds : ["__none__"] },
+        memberId: { in: emptyGuard },
       },
       _count: { _all: true },
     }),
   ]);
   const byMember = new Map(records.map((r) => [r.memberId, r]));
-  const lifetimeMap = new Map<string, { attended: number; absent: number }>();
+  const lifetimeMap = new Map<number, { attended: number; absent: number }>();
   for (const row of lifetime) {
     const cur = lifetimeMap.get(row.memberId) ?? { attended: 0, absent: 0 };
     if (row.status === "Present" || row.status === "Late") {
@@ -100,6 +103,8 @@ export async function getAttendanceForDate(dateKeyStr: string, unit?: Unit | "al
       fullName: m.fullName,
       unit: m.unit,
       gender: m.gender,
+      sewaRole: m.sewaRole,
+      registryStatus: m.registryStatus,
       status: (rec?.status as AttendanceStatus) ?? null,
       notes: rec?.notes ?? null,
       sessions,
@@ -138,7 +143,7 @@ export async function getMonthCalendarSummary(
   const records = await prisma.attendanceRecord.findMany({
     where: {
       date: { gte: monthStart, lte: monthEnd },
-      memberId: { in: memberIds.length ? memberIds : ["__none__"] },
+      memberId: { in: memberIds.length ? memberIds : [-1] },
     },
   });
 

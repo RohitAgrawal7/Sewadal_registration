@@ -11,7 +11,7 @@ import {
   startOfDay,
   startOfWeek,
 } from "date-fns";
-import type { Member } from "@prisma/client";
+import type { Member } from "@/generated/prisma";
 
 export type TenureParts = {
   years: number;

@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { formatBirthdayChip } from "@/lib/dates";
 import type { MemberWithDerived } from "@/lib/dates";
-import type { Member, UnitAssignmentLog } from "@prisma/client";
+import type { Member, UnitAssignmentLog } from "@/generated/prisma";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { UnitBadge } from "@/components/ui/UnitBadge";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { SEWA_ROLE_LABELS, normalizeSewaRole } from "@/lib/sewadaar";
+import { SEWA_ROLE_LABELS, normalizeSewaRole, normalizeRegistryStatus, REGISTRY_STATUS_LABELS } from "@/lib/sewadaar";
 
 type MemberDetail = MemberWithDerived<
   Member & { unitHistory?: UnitAssignmentLog[] }
@@ -41,6 +41,15 @@ export function MemberProfileHeader({
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
               {SEWA_ROLE_LABELS[normalizeSewaRole(member.sewaRole)]}
             </span>
+            <span
+              className={
+                normalizeRegistryStatus(member.registryStatus) === "Registered"
+                  ? "rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-800"
+                  : "rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600"
+              }
+            >
+              {REGISTRY_STATUS_LABELS[normalizeRegistryStatus(member.registryStatus)]}
+            </span>
           </div>
           {member.fatherHusbandName && (
             <p className="mt-2 text-sm text-slate-500">
@@ -70,7 +79,7 @@ export function MemberProfileHeader({
             </div>
             <div className="min-w-0">
               <dt className="text-xs text-slate-400">Email</dt>
-              <dd className="break-all">{member.email}</dd>
+              <dd className="break-all">{member.email || "—"}</dd>
             </div>
           </dl>
         </div>

@@ -42,6 +42,14 @@ import { PaginationBar } from "@/components/ui/PaginationBar";
 import { paginate, type PageSize } from "@/lib/pagination";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import {
+  REGISTRY_STATUSES,
+  REGISTRY_STATUS_LABELS,
+  SEWA_ROLES,
+  SEWA_ROLE_LABELS,
+  normalizeRegistryStatus,
+  normalizeSewaRole,
+} from "@/lib/sewadaar";
 
 type Draft = Record<string, AttendanceStatus | "">;
 
@@ -64,16 +72,18 @@ export function AttendanceMarkPanel({
   byGender: GenderAttendanceBreakdown[];
   returnTo?: string;
   onSelectUnit: (unit: string | null) => void;
-  onRemoved?: (memberId: string) => void;
+  onRemoved?: (memberId: number) => void;
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft>({});
   const [listFilter, setListFilter] = useState("");
   const [genderFilter, setGenderFilter] = useState("");
+  const [sewaRoleFilter, setSewaRoleFilter] = useState("");
+  const [registryFilter, setRegistryFilter] = useState("");
   const [showByUnit, setShowByUnit] = useState(false);
   const [showByGender, setShowByGender] = useState(false);
-  const [removeId, setRemoveId] = useState<string | null>(null);
-  const [removedIds, setRemovedIds] = useState<string[]>([]);
+  const [removeId, setRemoveId] = useState<number | null>(null);
+  const [removedIds, setRemovedIds] = useState<number[]>([]);
   const [pdfPreview, setPdfPreview] = useState<AttendancePdfFile | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<PageSize>(20);
@@ -101,11 +111,23 @@ export function AttendanceMarkPanel({
     const words = q.split(/\s+/).filter(Boolean);
     return rows.filter((r) => {
       if (genderFilter && r.gender !== genderFilter) return false;
+      if (
+        sewaRoleFilter &&
+        normalizeSewaRole(r.sewaRole) !== sewaRoleFilter
+      ) {
+        return false;
+      }
+      if (
+        registryFilter &&
+        normalizeRegistryStatus(r.registryStatus) !== registryFilter
+      ) {
+        return false;
+      }
       if (!words.length) return true;
       const hay = r.fullName.toLowerCase();
       return words.every((w) => hay.includes(w));
     });
-  }, [rows, listFilter, genderFilter]);
+  }, [rows, listFilter, genderFilter, sewaRoleFilter, registryFilter]);
 
   const presentRows = filteredRows.filter(
     (r) =>
@@ -118,7 +140,7 @@ export function AttendanceMarkPanel({
 
   useEffect(() => {
     setPage(1);
-  }, [listFilter, genderFilter, dateKey, unitFilter]);
+  }, [listFilter, genderFilter, sewaRoleFilter, registryFilter, dateKey, unitFilter]);
 
   const pagedPresent = paginate(presentRows, page, pageSize);
 
@@ -126,9 +148,10 @@ export function AttendanceMarkPanel({
     const marks = Object.entries(draft)
       .filter(([, status]) => status)
       .map(([memberId, status]) => ({
-        memberId,
+        memberId: Number(memberId),
         status: status as AttendanceStatus,
-      }));
+      }))
+      .filter((m) => Number.isInteger(m.memberId) && m.memberId > 0);
 
     if (marks.length === 0) {
       toast.error("Mark at least one member before saving");
@@ -184,7 +207,7 @@ export function AttendanceMarkPanel({
     }).then(setPdfPreview);
   }
 
-  function removePresent(memberId: string) {
+  function removePresent(memberId: number) {
     startTransition(async () => {
       const result = await clearAttendanceForDate(dateKey, [memberId]);
       if (result.success) {
@@ -478,7 +501,7 @@ export function AttendanceMarkPanel({
         </div>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
           Search list
           <Input
@@ -488,7 +511,7 @@ export function AttendanceMarkPanel({
           />
         </label>
         <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-          Gender
+          Type
           <Select
             value={genderFilter}
             onChange={(e) => setGenderFilter(e.target.value)}
@@ -497,6 +520,34 @@ export function AttendanceMarkPanel({
             {GENDERS.map((g) => (
               <option key={g} value={g}>
                 {GENDER_LABELS[g]}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+          Sewa role
+          <Select
+            value={sewaRoleFilter}
+            onChange={(e) => setSewaRoleFilter(e.target.value)}
+          >
+            <option value="">All roles</option>
+            {SEWA_ROLES.map((role) => (
+              <option key={role} value={role}>
+                {SEWA_ROLE_LABELS[role]}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+          Registration
+          <Select
+            value={registryFilter}
+            onChange={(e) => setRegistryFilter(e.target.value)}
+          >
+            <option value="">All</option>
+            {REGISTRY_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {REGISTRY_STATUS_LABELS[status]}
               </option>
             ))}
           </Select>

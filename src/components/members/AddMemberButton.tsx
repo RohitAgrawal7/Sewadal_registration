@@ -3,7 +3,7 @@
 import { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useRouter } from "next/navigation";
-import type { Member } from "@prisma/client";
+import type { Member } from "@/generated/prisma";
 import type { Unit } from "@/lib/enums";
 import { MemberForm } from "@/components/members/MemberForm";
 import { Button } from "@/components/ui/Button";

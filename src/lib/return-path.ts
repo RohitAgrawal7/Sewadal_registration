@@ -5,7 +5,11 @@ export function safeReturnPath(value: string | null | undefined): string | null 
   return value;
 }
 
-export function memberHref(id: string, from?: string | null, edit = false) {
+export function memberHref(
+  id: string | number,
+  from?: string | null,
+  edit = false
+) {
   const params = new URLSearchParams();
   if (edit) params.set("edit", "1");
   const safeFrom = safeReturnPath(from);

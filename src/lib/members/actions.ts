@@ -10,10 +10,18 @@ import {
 } from "@/lib/validations/member";
 import { MembershipStatus } from "@/lib/enums";
 import { parseDateInput } from "@/lib/utils";
+import { parseMemberId } from "@/lib/members/ids";
 
 function emptyToNull(value: string | undefined | null): string | null {
   if (value === undefined || value === null || value === "") return null;
   return value;
+}
+
+/** Stable upload paths in DB (drop cache-bust query strings). */
+function cleanUploadUrl(value: string | undefined | null): string | null {
+  const raw = emptyToNull(value);
+  if (!raw) return null;
+  return raw.split("?")[0] ?? raw;
 }
 
 type MemberWriteData = ReturnType<typeof toMemberData>;
@@ -21,6 +29,7 @@ type MemberWriteData = ReturnType<typeof toMemberData>;
 function splitMemberWrite(data: MemberWriteData) {
   const {
     sewaRole,
+    registryStatus,
     fatherHusbandName,
     qualification,
     profession,
@@ -33,6 +42,7 @@ function splitMemberWrite(data: MemberWriteData) {
     core,
     extra: {
       sewaRole,
+      registryStatus,
       fatherHusbandName,
       qualification,
       profession,
@@ -44,19 +54,20 @@ function splitMemberWrite(data: MemberWriteData) {
 }
 
 async function applySewadaarColumns(
-  id: string,
+  id: number,
   extra: ReturnType<typeof splitMemberWrite>["extra"]
 ) {
-  // Written with SQL so a stale webpack Prisma client (missing sewaRole) still saves.
+  // Written with SQL so a stale webpack Prisma client still saves newer columns.
   await prisma.$executeRaw`
-    UPDATE Member
-    SET sewaRole = ${extra.sewaRole},
-        fatherHusbandName = ${extra.fatherHusbandName},
-        qualification = ${extra.qualification},
-        profession = ${extra.profession},
-        skills = ${extra.skills},
-        bloodGroup = ${extra.bloodGroup},
-        identityDocUrl = ${extra.identityDocUrl}
+    UPDATE sewadal."Member"
+    SET "sewaRole" = ${extra.sewaRole},
+        "registryStatus" = ${extra.registryStatus},
+        "fatherHusbandName" = ${extra.fatherHusbandName},
+        "qualification" = ${extra.qualification},
+        "profession" = ${extra.profession},
+        "skills" = ${extra.skills},
+        "bloodGroup" = ${extra.bloodGroup},
+        "identityDocUrl" = ${extra.identityDocUrl}
     WHERE id = ${id}
   `;
 }
@@ -69,8 +80,8 @@ function toMemberData(values: MemberFormValues) {
     dateOfBirth: parseDateInput(values.dateOfBirth),
     nationalIdType: values.nationalIdType,
     nationalIdNumber: emptyToNull(values.nationalIdNumber),
-    photoUrl: emptyToNull(values.photoUrl),
-    email: values.email.trim().toLowerCase(),
+    photoUrl: cleanUploadUrl(values.photoUrl),
+    email: emptyToNull(values.email?.trim().toLowerCase()),
     phonePrimary: values.phonePrimary.trim(),
     phoneSecondary: emptyToNull(values.phoneSecondary),
     address: values.address.trim(),
@@ -84,6 +95,7 @@ function toMemberData(values: MemberFormValues) {
     unitAssignedDate: parseDateInput(values.unitAssignedDate),
     role: emptyToNull(values.role),
     sewaRole: values.sewaRole,
+    registryStatus: values.registryStatus,
     registrationDate: parseDateInput(values.registrationDate),
     membershipStatus: values.membershipStatus,
     statusEffectiveDate: parseDateInput(values.statusEffectiveDate),
@@ -96,12 +108,12 @@ function toMemberData(values: MemberFormValues) {
     profession: emptyToNull(values.profession),
     skills: emptyToNull(values.skills),
     bloodGroup: emptyToNull(values.bloodGroup),
-    identityDocUrl: emptyToNull(values.identityDocUrl),
+    identityDocUrl: cleanUploadUrl(values.identityDocUrl),
   };
 }
 
 export type CreatedMemberPayload = {
-  id: string;
+  id: number;
   fullName: string;
   preferredName: string | null;
   gender: string | null;
@@ -109,7 +121,7 @@ export type CreatedMemberPayload = {
   nationalIdType: string;
   nationalIdNumber: string | null;
   photoUrl: string | null;
-  email: string;
+  email: string | null;
   phonePrimary: string;
   phoneSecondary: string | null;
   address: string;
@@ -123,6 +135,7 @@ export type CreatedMemberPayload = {
   unitAssignedDate: Date;
   role: string | null;
   sewaRole: string;
+  registryStatus: string;
   registrationDate: Date;
   membershipStatus: string;
   statusEffectiveDate: Date;
@@ -139,7 +152,7 @@ export type CreatedMemberPayload = {
 };
 
 export type ActionResult =
-  | { success: true; id: string; member?: CreatedMemberPayload }
+  | { success: true; id: number; member?: CreatedMemberPayload }
   | { success: false; error: string };
 
 function memberWriteError(e: unknown, fallback: string): string {
@@ -159,11 +172,11 @@ function memberWriteError(e: unknown, fallback: string): string {
   return fallback;
 }
 
-function revalidateMemberCaches(memberId?: string) {
+function revalidateMemberCaches(memberId?: number | string) {
   revalidatePath("/", "layout");
   revalidatePath("/lists", "layout");
   revalidatePath("/attendance", "layout");
-  if (memberId) revalidatePath(`/members/${memberId}`);
+  if (memberId != null) revalidatePath(`/members/${memberId}`);
 }
 
 export async function fetchMembersSnapshot(): Promise<MemberWithDerived[]> {
@@ -209,17 +222,20 @@ export async function createMember(
 }
 
 export async function updateMember(
-  id: string,
+  id: string | number,
   raw: MemberFormValues,
   options?: { confirmUnitChange?: boolean }
 ): Promise<ActionResult> {
+  const numericId = parseMemberId(id);
+  if (!numericId) return { success: false, error: "Member not found" };
+
   const parsed = memberFormSchema.safeParse(raw);
   if (!parsed.success) {
     return { success: false, error: parsed.error.errors[0]?.message ?? "Invalid form" };
   }
 
   const existing = await prisma.member.findUnique({
-    where: { id },
+    where: { id: numericId },
     include: { unitHistory: { where: { endDate: null }, take: 1 } },
   });
   if (!existing) return { success: false, error: "Member not found" };
@@ -248,7 +264,7 @@ export async function updateMember(
         }
         await tx.unitAssignmentLog.create({
           data: {
-            memberId: id,
+            memberId: numericId,
             unit: data.unit,
             startDate: data.unitAssignedDate,
             endDate: null,
@@ -257,7 +273,7 @@ export async function updateMember(
       }
 
       await tx.member.update({
-        where: { id },
+        where: { id: numericId },
         data: {
           ...core,
           unitAssignedDate: unitChanged
@@ -266,39 +282,45 @@ export async function updateMember(
         },
       });
     });
-    await applySewadaarColumns(id, extra);
+    await applySewadaarColumns(numericId, extra);
 
-    revalidateMemberCaches(id);
-    return { success: true, id };
+    revalidateMemberCaches(numericId);
+    return { success: true, id: numericId };
   } catch (e: unknown) {
     console.error("updateMember failed", e);
     return { success: false, error: memberWriteError(e, "Failed to update member") };
   }
 }
 
-export async function deactivateMember(id: string): Promise<ActionResult> {
-  const existing = await prisma.member.findUnique({ where: { id } });
+export async function deactivateMember(id: string | number): Promise<ActionResult> {
+  const numericId = parseMemberId(id);
+  if (!numericId) return { success: false, error: "Member not found" };
+
+  const existing = await prisma.member.findUnique({ where: { id: numericId } });
   if (!existing) return { success: false, error: "Member not found" };
 
   await prisma.member.update({
-    where: { id },
+    where: { id: numericId },
     data: {
       membershipStatus: MembershipStatus.Inactive,
       statusEffectiveDate: new Date(),
     },
   });
 
-  revalidateMemberCaches(id);
-  return { success: true, id };
+  revalidateMemberCaches(numericId);
+  return { success: true, id: numericId };
 }
 
 export async function reassignUnit(
-  id: string,
+  id: string | number,
   newUnit: string,
   assignedDateIso: string
 ): Promise<ActionResult> {
+  const numericId = parseMemberId(id);
+  if (!numericId) return { success: false, error: "Member not found" };
+
   const existing = await prisma.member.findUnique({
-    where: { id },
+    where: { id: numericId },
     include: { unitHistory: { where: { endDate: null }, take: 1 } },
   });
   if (!existing) return { success: false, error: "Member not found" };
@@ -318,14 +340,14 @@ export async function reassignUnit(
     }
     await tx.unitAssignmentLog.create({
       data: {
-        memberId: id,
+        memberId: numericId,
         unit: newUnit,
         startDate: assignedDate,
         endDate: null,
       },
     });
     await tx.member.update({
-      where: { id },
+      where: { id: numericId },
       data: {
         unit: newUnit,
         unitAssignedDate: assignedDate,
@@ -333,6 +355,6 @@ export async function reassignUnit(
     });
   });
 
-  revalidateMemberCaches(id);
-  return { success: true, id };
+  revalidateMemberCaches(numericId);
+  return { success: true, id: numericId };
 }

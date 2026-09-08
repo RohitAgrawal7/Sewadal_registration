@@ -23,16 +23,16 @@ function StatCard({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-2xl border px-4 py-3.5 shadow-sm",
+        "relative overflow-hidden rounded-2xl border px-4 py-3.5 shadow-[0_1px_0_rgba(255,255,255,0.85)_inset,0_8px_18px_rgba(15,23,42,0.06)] transition hover:-translate-y-0.5 hover:shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_12px_24px_rgba(15,23,42,0.08)]",
         surface ?? "border-slate-200/80 bg-white"
       )}
     >
       {barClass && (
-        <div className={cn("absolute inset-y-0 left-0 w-1", barClass)} />
+        <div className={cn("absolute inset-y-0 left-0 w-1.5", barClass)} />
       )}
       <p
         className={cn(
-          "text-[11px] font-semibold uppercase tracking-wide",
+          "pl-1 text-[11px] font-semibold uppercase tracking-wide",
           labelClass ?? "text-slate-500"
         )}
       >
@@ -40,8 +40,8 @@ function StatCard({
       </p>
       <p
         className={cn(
-          "mt-1 text-2xl font-bold tabular-nums tracking-tight",
-          accent ?? "text-slate-900"
+          "mt-1 pl-1 text-2xl font-bold tabular-nums tracking-tight",
+          accent ?? "text-slate-800"
         )}
       >
         {value}
@@ -75,17 +75,18 @@ export function QuickStatsRow({
           <StatCard
             label="Total members"
             value={total}
-            surface="border-slate-800 bg-slate-900"
-            labelClass="text-slate-400"
-            accent="text-white"
+            accent="text-sky-950"
+            barClass="bg-gradient-to-b from-sky-400 to-blue-700"
+            surface="border-sky-200 bg-gradient-to-br from-sky-50 via-white to-blue-100/70"
+            labelClass="text-sky-800"
           />
           <StatCard
             label="Active"
             value={active}
-            accent="text-teal-800"
-            barClass="bg-teal-500"
-            surface="border-teal-200 bg-teal-50"
-            labelClass="text-teal-700"
+            accent="text-amber-950"
+            barClass="bg-gradient-to-b from-amber-400 to-orange-700"
+            surface="border-amber-200 bg-gradient-to-br from-amber-50 via-white to-orange-100/60"
+            labelClass="text-amber-800"
           />
           {ALL_UNITS.map((u) => (
             <StatCard
@@ -94,24 +95,28 @@ export function QuickStatsRow({
               value={byUnit[u]}
               accent={UNIT_COLORS[u].text}
               barClass={UNIT_COLORS[u].bg}
-              surface={cn("border-slate-200", UNIT_COLORS[u].soft)}
+              surface={cn(
+                UNIT_COLORS[u].border,
+                "bg-gradient-to-br from-white",
+                UNIT_COLORS[u].soft
+              )}
             />
           ))}
           <StatCard
             label="New this month"
             value={newThisMonth}
-            accent="text-indigo-800"
-            barClass="bg-indigo-500"
-            surface="border-indigo-200 bg-indigo-50"
-            labelClass="text-indigo-700"
+            accent="text-stone-900"
+            barClass="bg-gradient-to-b from-stone-400 to-amber-800"
+            surface="border-stone-300 bg-gradient-to-br from-stone-50 via-white to-amber-100/70"
+            labelClass="text-stone-700"
           />
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_1px_0_rgba(255,255,255,1)_inset,0_8px_24px_rgba(15,23,42,0.05)] sm:p-5">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
-            <h3 className="text-sm font-semibold text-slate-900">
+            <h3 className="text-sm font-semibold text-slate-800">
               Totals by gender &amp; age
             </h3>
             <p className="text-xs text-slate-500">

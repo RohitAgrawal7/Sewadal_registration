@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import type { UnitAssignmentLog } from "@prisma/client";
+import type { UnitAssignmentLog } from "@/generated/prisma";
 import { UnitBadge } from "@/components/ui/UnitBadge";
 import { formatTenure, tenureBetween } from "@/lib/dates";
 
