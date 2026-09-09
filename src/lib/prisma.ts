@@ -1,5 +1,6 @@
 import { PrismaClient } from "@/generated/prisma";
 import { clearDatabaseReady, ensureDatabase } from "./ensure-database";
+import { withDbRetry } from "./db/helpers";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -7,7 +8,20 @@ const globalForPrisma = globalThis as unknown as {
   prismaReady: Promise<void> | undefined;
 };
 
-/** Strip quotes/whitespace — common when pasting into Vercel env UI. */
+function rebuildPostgresUrl(parsed: URL): string {
+  const user = encodeURIComponent(decodeURIComponent(parsed.username));
+  const pass = encodeURIComponent(decodeURIComponent(parsed.password));
+  const qs = parsed.searchParams.toString();
+  return `postgresql://${user}:${pass}@${parsed.host}${parsed.pathname}${
+    qs ? `?${qs}` : ""
+  }`;
+}
+
+/**
+ * Normalize Supabase pooler URLs for Prisma + serverless:
+ * - Transaction pooler (6543) + pgbouncer=true avoids session-mode max-client errors
+ * - connection_limit=1 keeps Next.js from exhausting the tiny pooler pool
+ */
 export function resolveDatabaseUrl(): string {
   let url = (process.env.DATABASE_URL ?? "").trim();
   if (
@@ -21,6 +35,34 @@ export function resolveDatabaseUrl(): string {
       "DATABASE_URL is not set. Add your Supabase Postgres URL in Vercel Environment Variables."
     );
   }
+
+  try {
+    const parsed = new URL(url);
+    const isPooler =
+      parsed.hostname.includes("pooler.supabase.com") ||
+      parsed.hostname.includes("pooler.supabase.co");
+    if (isPooler) {
+      if (parsed.port === "5432" || parsed.port === "") {
+        parsed.port = "6543";
+      }
+      if (!parsed.searchParams.has("pgbouncer")) {
+        parsed.searchParams.set("pgbouncer", "true");
+      }
+      if (!parsed.searchParams.has("connection_limit")) {
+        parsed.searchParams.set("connection_limit", "1");
+      }
+      if (!parsed.searchParams.has("sslmode")) {
+        parsed.searchParams.set("sslmode", "require");
+      }
+      if (!parsed.searchParams.has("connect_timeout")) {
+        parsed.searchParams.set("connect_timeout", "10");
+      }
+      url = rebuildPostgresUrl(parsed);
+    }
+  } catch {
+    // Keep original URL if parsing fails.
+  }
+
   return url;
 }
 
@@ -29,6 +71,7 @@ function createPrismaClient(url: string) {
     datasources: {
       db: { url },
     },
+    log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });
 }
 
@@ -90,24 +133,25 @@ function getClient(): PrismaClient {
 
 /** Wait until schema checks finish. Call before every server DB path. */
 export async function readyPrisma(): Promise<PrismaClient> {
-  const client = getClient();
-  const url = globalForPrisma.prismaUrl ?? resolveDatabaseUrl();
-  const ready =
-    globalForPrisma.prismaReady ?? ensureDatabase(client, url);
-  globalForPrisma.prismaReady = ready;
-  try {
-    await ready;
-  } catch (error) {
-    globalForPrisma.prismaReady = undefined;
-    clearDatabaseReady(url);
-    throw error;
-  }
-  return client;
+  return withDbRetry("readyPrisma", async () => {
+    const client = getClient();
+    const url = globalForPrisma.prismaUrl ?? resolveDatabaseUrl();
+    const ready =
+      globalForPrisma.prismaReady ?? ensureDatabase(client, url);
+    globalForPrisma.prismaReady = ready;
+    try {
+      await ready;
+    } catch (error) {
+      globalForPrisma.prismaReady = undefined;
+      clearDatabaseReady(url);
+      throw error;
+    }
+    return client;
+  });
 }
 
 /**
- * Proxy keeps call sites using `prisma.x`, but does NOT wrap model methods
- * (wrapping breaks Prisma `$transaction([...])` which needs real PrismaPromises).
+ * Proxy keeps call sites using `prisma.x`, but does NOT wrap model methods.
  * Prefer `readyPrisma()` in server code so schema checks always complete first.
  */
 export const prisma = new Proxy({} as PrismaClient, {

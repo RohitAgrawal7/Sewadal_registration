@@ -3,14 +3,43 @@ import { getDashboardStats } from "@/lib/members/queries";
 import { BirthdaySpotlight } from "@/components/birthday/BirthdaySpotlight";
 import { QuickStatsRow } from "@/components/stats/QuickStatsRow";
 import { MemberTable } from "@/components/members/MemberTable";
+import { DbLoadError } from "@/components/ui/DbLoadError";
+import { publicDbError } from "@/lib/db/helpers";
+import type { Unit } from "@/lib/enums";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+const EMPTY_BY_UNIT: Record<Unit, number> = {
+  Unit1: 0,
+  Unit2: 0,
+  Unit3: 0,
+  Unit4: 0,
+};
 
 export default async function DashboardPage() {
-  const stats = await getDashboardStats();
+  let loadError: string | null = null;
+  let stats: Awaited<ReturnType<typeof getDashboardStats>> = {
+    total: 0,
+    active: 0,
+    byUnit: { ...EMPTY_BY_UNIT },
+    newThisMonth: 0,
+    members: [],
+  };
+
+  try {
+    stats = await getDashboardStats();
+  } catch (error) {
+    console.error("Dashboard data failed", error);
+    loadError = publicDbError(error, "Could not load dashboard");
+  }
 
   return (
     <div className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:space-y-10 lg:py-10">
+      {loadError ? (
+        <DbLoadError title="Dashboard data could not load" message={loadError} />
+      ) : null}
+
       <section className="overflow-hidden rounded-2xl border border-sky-200/80 bg-gradient-to-br from-sky-50 via-white to-amber-50 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_10px_28px_rgba(37,99,235,0.08)]">
         <div className="h-1.5 bg-gradient-to-r from-sky-500 via-blue-500 to-amber-600" />
         <div className="flex flex-wrap items-end justify-between gap-4 px-5 py-6 sm:px-7">

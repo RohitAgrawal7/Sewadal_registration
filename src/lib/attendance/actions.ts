@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@/generated/prisma";
 import { readyPrisma } from "@/lib/prisma";
 import {
   AttendanceStatus,
@@ -13,6 +14,12 @@ import {
 import { parseDateKey } from "@/lib/attendance/date-utils";
 import { orgSettings } from "@/lib/org-settings";
 import { parseMemberId } from "@/lib/members/ids";
+import {
+  WRITE_CHUNK,
+  chunkArray,
+  publicDbError,
+  withDbRetry,
+} from "@/lib/db/helpers";
 
 export type AttendanceMarkInput = {
   memberId: number;
@@ -31,20 +38,11 @@ export type QuickMemberInput = {
 };
 
 function attendanceError(e: unknown, fallback: string): string {
-  const message =
-    e && typeof e === "object" && "message" in e && typeof e.message === "string"
-      ? e.message
-      : "";
-  if (/Unique constraint|P2002/i.test(message)) {
-    return "Attendance already recorded for this member and date";
-  }
-  if (/Foreign key|P2003/i.test(message)) {
+  const msg = publicDbError(e, fallback);
+  if (/Foreign key|P2003/i.test(String(e instanceof Error ? e.message : e))) {
     return "Member not found. Refresh and try again.";
   }
-  if (/DATABASE_URL|Can't reach|P1001|P1017/i.test(message)) {
-    return "Database connection failed. Check DATABASE_URL and try again.";
-  }
-  return fallback;
+  return msg;
 }
 
 function softRevalidate(...paths: Array<string | [string, "layout"]>) {
@@ -87,34 +85,43 @@ export async function saveAttendanceForDate(
 
   try {
     const db = await readyPrisma();
-    // Sequential upserts work with Supabase transaction pooler; interactive $transaction does not.
-    for (const mark of marks) {
-      await db.attendanceRecord.upsert({
-        where: {
-          memberId_date: {
-            memberId: mark.memberId,
-            date: day,
-          },
-        },
-        create: {
-          memberId: mark.memberId,
-          date: day,
-          status: mark.status,
-          notes: mark.notes?.trim() || null,
-        },
-        update: {
-          status: mark.status,
-          notes: mark.notes?.trim() || null,
-          markedAt: new Date(),
-        },
-      });
+    // One SQL upsert batch per chunk — scales to 100+ marks without pool exhaustion.
+    const now = new Date();
+    for (const chunk of chunkArray(marks, WRITE_CHUNK)) {
+      const values = chunk.map(
+        (mark) =>
+          Prisma.sql`(
+            ${mark.memberId},
+            ${day},
+            ${mark.status},
+            ${mark.notes?.trim() || null},
+            ${now},
+            ${now}
+          )`
+      );
+      await withDbRetry("saveAttendanceChunk", () =>
+        db.$executeRaw`
+          INSERT INTO sewadal."AttendanceRecord"
+            ("memberId", "date", "status", "notes", "markedAt", "updatedAt")
+          VALUES ${Prisma.join(values)}
+          ON CONFLICT ("memberId", "date")
+          DO UPDATE SET
+            "status" = EXCLUDED."status",
+            "notes" = EXCLUDED."notes",
+            "markedAt" = EXCLUDED."markedAt",
+            "updatedAt" = EXCLUDED."updatedAt"
+        `
+      );
     }
 
     softRevalidate("/attendance", "/");
     return { success: true };
   } catch (e) {
     console.error("saveAttendanceForDate failed", e);
-    return { success: false, error: attendanceError(e, "Failed to save attendance") };
+    return {
+      success: false,
+      error: attendanceError(e, "Failed to save attendance"),
+    };
   }
 }
 

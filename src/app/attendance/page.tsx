@@ -1,16 +1,14 @@
-import {
-  getAttendanceForDate,
-  getAttendanceSession,
-  getMembersForSearch,
-  getMonthCalendarSummary,
-  getRangeReport,
-} from "@/lib/attendance/queries";
+import { getAttendancePageData } from "@/lib/attendance/queries";
 import { todayKey } from "@/lib/attendance/date-utils";
 import { AttendanceClient } from "@/components/attendance/AttendanceClient";
 import type { Unit } from "@/lib/enums";
 import { UNITS } from "@/lib/enums";
 import type { AttendanceTotals } from "@/lib/attendance/stats";
 import { endOfMonth, format, startOfMonth } from "date-fns";
+import { publicDbError } from "@/lib/db/helpers";
+
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const EMPTY_TOTALS: AttendanceTotals = {
   present: 0,
@@ -23,22 +21,9 @@ const EMPTY_TOTALS: AttendanceTotals = {
   rate: 0,
 };
 
-export const dynamic = "force-dynamic";
-
 function parseUnit(value: string | undefined): Unit | "all" {
   if (value && (UNITS as string[]).includes(value)) return value as Unit;
   return "all";
-}
-
-function dbErrorMessage(error: unknown): string {
-  const msg = error instanceof Error ? error.message : String(error);
-  if (/DATABASE_URL|Can't reach database|P1001|P1000/i.test(msg)) {
-    return "Database is unavailable. Check DATABASE_URL (Supabase pooler) and that schema sewadal exists (npx prisma db push).";
-  }
-  if (/sewadal|does not exist|P2021/i.test(msg)) {
-    return "Database tables are missing in schema sewadal. Run: npx prisma db push";
-  }
-  return "Could not load attendance from the database. Refresh or check server logs.";
 }
 
 export default async function AttendancePage({
@@ -76,28 +61,40 @@ export default async function AttendancePage({
       : format(monthEnd, "yyyy-MM-dd");
 
   let loadError: string | null = null;
-  let calendar: Awaited<ReturnType<typeof getMonthCalendarSummary>>;
-  let dayData: Awaited<ReturnType<typeof getAttendanceForDate>>;
-  let rangeData: Awaited<ReturnType<typeof getRangeReport>>;
-  let searchMembers: Awaited<ReturnType<typeof getMembersForSearch>>;
-  let session: Awaited<ReturnType<typeof getAttendanceSession>>;
+  let calendar: Awaited<
+    ReturnType<typeof getAttendancePageData>
+  >["calendar"];
+  let dayData: Awaited<ReturnType<typeof getAttendancePageData>>["dayData"];
+  let rangeData: Awaited<
+    ReturnType<typeof getAttendancePageData>
+  >["rangeData"];
+  let searchMembers: Awaited<
+    ReturnType<typeof getAttendancePageData>
+  >["searchMembers"];
+  let session: Awaited<ReturnType<typeof getAttendancePageData>>["session"];
 
   try {
-    [calendar, dayData, rangeData, searchMembers, session] = await Promise.all([
-      getMonthCalendarSummary(year, month, unit),
-      getAttendanceForDate(selectedDate, unit),
-      getRangeReport(from, to, unit),
-      getMembersForSearch(),
-      getAttendanceSession(selectedDate),
-    ]);
+    const bundle = await getAttendancePageData({
+      dateKey: selectedDate,
+      unit,
+      year,
+      month,
+      fromKey: from,
+      toKey: to,
+    });
+    calendar = bundle.calendar;
+    dayData = bundle.dayData;
+    rangeData = bundle.rangeData;
+    searchMembers = bundle.searchMembers;
+    session = bundle.session;
   } catch (error) {
     console.error("Attendance page data failed during build/runtime", error);
-    loadError = dbErrorMessage(error);
-    const { monthStart: ms, monthEnd: me } = (() => {
-      const monthStart = new Date(Date.UTC(year, month - 1, 1));
-      const monthEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
-      return { monthStart, monthEnd };
-    })();
+    loadError = publicDbError(
+      error,
+      "Could not load attendance from the database"
+    );
+    const ms = new Date(Date.UTC(year, month - 1, 1));
+    const me = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
     calendar = {
       year,
       month,

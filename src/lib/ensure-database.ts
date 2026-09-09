@@ -2,6 +2,14 @@ import type { PrismaClient } from "@/generated/prisma";
 
 const readyByUrl = new Map<string, Promise<void>>();
 
+const CORE_TABLES = [
+  "AppUser",
+  "Member",
+  "AttendanceRecord",
+  "AttendanceSession",
+  "UnitAssignmentLog",
+] as const;
+
 async function ensureRegistryStatusColumn(client: PrismaClient) {
   try {
     await client.$queryRaw`SELECT "registryStatus" FROM sewadal."Member" LIMIT 1`;
@@ -16,11 +24,27 @@ async function ensureRegistryStatusColumn(client: PrismaClient) {
   }
 }
 
+/** One round-trip: confirm schema + core tables exist. */
 async function verifyCoreTables(client: PrismaClient) {
-  await client.$queryRaw`SELECT 1 FROM sewadal."AppUser" LIMIT 1`;
-  await client.$queryRaw`SELECT 1 FROM sewadal."Member" LIMIT 1`;
-  await client.$queryRaw`SELECT 1 FROM sewadal."AttendanceRecord" LIMIT 1`;
-  await client.$queryRaw`SELECT 1 FROM sewadal."AttendanceSession" LIMIT 1`;
+  const rows = await client.$queryRaw<Array<{ table_name: string }>>`
+    SELECT table_name
+    FROM information_schema.tables
+    WHERE table_schema = 'sewadal'
+      AND table_name IN (
+        'AppUser',
+        'Member',
+        'AttendanceRecord',
+        'AttendanceSession',
+        'UnitAssignmentLog'
+      )
+  `;
+  const found = new Set(rows.map((r) => r.table_name));
+  const missing = CORE_TABLES.filter((name) => !found.has(name));
+  if (missing.length > 0) {
+    throw new Error(
+      `Database tables missing in schema sewadal: ${missing.join(", ")}. Run: npx prisma db push`
+    );
+  }
 }
 
 /** Drop cached readiness so the next call re-runs health checks (e.g. after client rebuild). */

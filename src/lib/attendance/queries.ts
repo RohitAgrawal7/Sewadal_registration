@@ -1,3 +1,4 @@
+import { Prisma } from "@/generated/prisma";
 import { readyPrisma } from "@/lib/prisma";
 import { type Unit } from "@/lib/enums";
 import { UNITS } from "@/lib/enums";
@@ -16,41 +17,48 @@ import {
   parseDateKeyEnd,
   utcMonthBounds,
 } from "@/lib/attendance/date-utils";
+import { idInFilter, withDbRetry } from "@/lib/db/helpers";
 
 export { dateKey, parseDateKey } from "@/lib/attendance/date-utils";
 
-/** All members for attendance UI (includes Inactive; filter in the panel if needed). */
-export async function getActiveMembers(unit?: Unit | "all") {
+const MEMBER_LIST_SELECT = {
+  id: true,
+  fullName: true,
+  preferredName: true,
+  gender: true,
+  phonePrimary: true,
+  address: true,
+  city: true,
+  stateRegion: true,
+  unit: true,
+  dateOfBirth: true,
+  membershipStatus: true,
+  sewaRole: true,
+  registryStatus: true,
+} satisfies Prisma.MemberSelect;
+
+type MemberListRow = Prisma.MemberGetPayload<{ select: typeof MEMBER_LIST_SELECT }>;
+
+async function loadMembers(
+  unit?: Unit | "all"
+): Promise<MemberListRow[]> {
   const db = await readyPrisma();
-  return db.member.findMany({
-    where: {
-      ...(unit && unit !== "all" ? { unit } : {}),
-    },
-    orderBy: [{ unit: "asc" }, { fullName: "asc" }],
-  });
+  return withDbRetry("loadMembers", () =>
+    db.member.findMany({
+      where: unit && unit !== "all" ? { unit } : undefined,
+      select: MEMBER_LIST_SELECT,
+      orderBy: [{ unit: "asc" }, { fullName: "asc" }],
+    })
+  );
+}
+
+/** Members for attendance marking (selected fields only — scales past 100+). */
+export async function getActiveMembers(unit?: Unit | "all") {
+  return loadMembers(unit);
 }
 
 export async function getMembersForSearch() {
-  const db = await readyPrisma();
-  const members = await db.member.findMany({
-    select: {
-      id: true,
-      fullName: true,
-      preferredName: true,
-      gender: true,
-      phonePrimary: true,
-      address: true,
-      city: true,
-      stateRegion: true,
-      unit: true,
-      dateOfBirth: true,
-      membershipStatus: true,
-      sewaRole: true,
-      registryStatus: true,
-    },
-    orderBy: { fullName: "asc" },
-  });
-
+  const members = await loadMembers("all");
   return members.map((m) => ({
     ...m,
     dateOfBirth: m.dateOfBirth.toISOString(),
@@ -60,30 +68,18 @@ export async function getMembersForSearch() {
 export async function getAttendanceSession(dateKeyStr: string) {
   const db = await readyPrisma();
   const day = parseDateKey(dateKeyStr);
-  return db.attendanceSession.findUnique({ where: { date: day } });
+  return withDbRetry("getAttendanceSession", () =>
+    db.attendanceSession.findUnique({ where: { date: day } })
+  );
 }
 
-export async function getAttendanceForDate(dateKeyStr: string, unit?: Unit | "all") {
-  const db = await readyPrisma();
-  const day = parseDateKey(dateKeyStr);
-  const members = await getActiveMembers(unit);
-  const memberIds = members.map((m) => m.id);
-  const emptyGuard = memberIds.length ? memberIds : [-1];
-  const [records, lifetime] = await Promise.all([
-    db.attendanceRecord.findMany({
-      where: {
-        date: day,
-        memberId: { in: emptyGuard },
-      },
-    }),
-    db.attendanceRecord.groupBy({
-      by: ["memberId", "status"],
-      where: {
-        memberId: { in: emptyGuard },
-      },
-      _count: { _all: true },
-    }),
-  ]);
+function buildDayPayload(
+  dateKeyStr: string,
+  day: Date,
+  members: MemberListRow[],
+  records: Array<{ memberId: number; status: string; notes: string | null }>,
+  lifetime: Array<{ memberId: number; status: string; _count: { _all: number } }>
+) {
   const byMember = new Map(records.map((r) => [r.memberId, r]));
   const lifetimeMap = new Map<number, { attended: number; absent: number }>();
   for (const row of lifetime) {
@@ -131,25 +127,67 @@ export async function getAttendanceForDate(dateKeyStr: string, unit?: Unit | "al
   };
 }
 
-export async function getMonthCalendarSummary(
-  year: number,
-  month: number,
+export async function getAttendanceForDate(
+  dateKeyStr: string,
   unit?: Unit | "all"
 ) {
   const db = await readyPrisma();
+  const day = parseDateKey(dateKeyStr);
+  const members = await loadMembers(unit);
+  const memberIds = members.map((m) => m.id);
+  const idFilter = idInFilter(memberIds);
+
+  const records = idFilter
+    ? await withDbRetry("dayRecords", () =>
+        db.attendanceRecord.findMany({
+          where: { date: day, memberId: idFilter },
+          select: { memberId: true, status: true, notes: true },
+        })
+      )
+    : [];
+
+  const lifetime = idFilter
+    ? await withDbRetry("lifetimeStats", () =>
+        db.attendanceRecord.groupBy({
+          by: ["memberId", "status"],
+          where: { memberId: idFilter },
+          _count: { _all: true },
+        })
+      )
+    : [];
+
+  return buildDayPayload(dateKeyStr, day, members, records, lifetime);
+}
+
+export async function getMonthCalendarSummary(
+  year: number,
+  month: number,
+  unit?: Unit | "all",
+  preloadedMembers?: MemberListRow[]
+) {
+  const db = await readyPrisma();
   const { monthStart, monthEnd } = utcMonthBounds(year, month);
-  const members = await getActiveMembers(unit);
+  const members = preloadedMembers ?? (await loadMembers(unit));
   const memberIds = members.map((m) => m.id);
   const totalMembers = members.length;
+  const idFilter = idInFilter(memberIds);
 
-  const records = await db.attendanceRecord.findMany({
-    where: {
-      date: { gte: monthStart, lte: monthEnd },
-      memberId: { in: memberIds.length ? memberIds : [-1] },
-    },
-  });
+  const records = idFilter
+    ? await withDbRetry("monthRecords", () =>
+        db.attendanceRecord.findMany({
+          where: {
+            date: { gte: monthStart, lte: monthEnd },
+            memberId: idFilter,
+          },
+          select: { date: true, status: true },
+        })
+      )
+    : [];
 
-  const byDay = new Map<string, { present: number; absent: number; late: number; excused: number }>();
+  const byDay = new Map<
+    string,
+    { present: number; absent: number; late: number; excused: number }
+  >();
 
   for (const r of records) {
     const key = dateKey(r.date);
@@ -194,30 +232,49 @@ export async function getMonthCalendarSummary(
 export async function getRangeReport(
   fromKey: string,
   toKey: string,
-  unit?: Unit | "all"
+  unit?: Unit | "all",
+  preloadedMembers?: MemberListRow[]
 ) {
   const db = await readyPrisma();
   const from = parseDateKey(fromKey);
   const to = parseDateKeyEnd(toKey);
-  const members = await getActiveMembers(unit);
+  const members = preloadedMembers ?? (await loadMembers(unit));
+  const memberIds = members.map((m) => m.id);
+  const idFilter = idInFilter(memberIds);
 
-  const records = await db.attendanceRecord.findMany({
-    where: {
-      date: { gte: from, lte: to },
-      memberId: { in: members.map((m) => m.id) },
-    },
-    include: { member: true },
-    orderBy: [{ date: "asc" }, { member: { fullName: "asc" } }],
-  });
+  const records = idFilter
+    ? await withDbRetry("rangeRecords", () =>
+        db.attendanceRecord.findMany({
+          where: {
+            date: { gte: from, lte: to },
+            memberId: idFilter,
+          },
+          select: {
+            date: true,
+            memberId: true,
+            status: true,
+            notes: true,
+          },
+          orderBy: [{ date: "asc" }, { memberId: "asc" }],
+        })
+      )
+    : [];
+
+  const byMemberId = new Map<number, typeof records>();
+  for (const r of records) {
+    const list = byMemberId.get(r.memberId);
+    if (list) list.push(r);
+    else byMemberId.set(r.memberId, [r]);
+  }
+
+  const memberById = new Map(members.map((m) => [m.id, m]));
 
   const memberStats = members.map((m) => {
-    const mine = records.filter((r) => r.memberId === m.id);
+    const mine = byMemberId.get(m.id) ?? [];
     const totals = summarizeStatuses(
       mine.map((r) => r.status as AttendanceStatus),
       undefined
     );
-    // For range report per member, expected = number of distinct dates with any attendance in range
-    // Better: expected = days in range when attendance was taken (unique dates with records overall)
     const sessions = totals.present + totals.absent;
     return {
       memberId: m.id,
@@ -255,8 +312,12 @@ export async function getRangeReport(
 
   const byUnit = (UNITS as Unit[]).map((u) => {
     const unitMembers = members.filter((m) => m.unit === u);
-    const unitRecords = records.filter((r) => r.member.unit === u);
-    const t = summarizeStatuses(unitRecords.map((r) => r.status as AttendanceStatus));
+    const unitRecords = records.filter(
+      (r) => memberById.get(r.memberId)?.unit === u
+    );
+    const t = summarizeStatuses(
+      unitRecords.map((r) => r.status as AttendanceStatus)
+    );
     t.expected = unitMembers.length * uniqueDates.length;
     t.unmarked = Math.max(0, t.expected - t.recorded);
     t.rate =
@@ -277,14 +338,84 @@ export async function getRangeReport(
     memberStats: memberStats.sort(
       (a, b) => b.present - a.present || a.fullName.localeCompare(b.fullName)
     ),
-    detailRows: records.map((r) => ({
-      date: dateKey(r.date),
-      memberId: r.memberId,
-      fullName: r.member.fullName,
-      unit: r.member.unit,
-      gender: r.member.gender,
-      status: r.status,
-      notes: r.notes,
-    })),
+    detailRows: records.map((r) => {
+      const m = memberById.get(r.memberId);
+      return {
+        date: dateKey(r.date),
+        memberId: r.memberId,
+        fullName: m?.fullName ?? "—",
+        unit: m?.unit ?? "—",
+        gender: m?.gender ?? null,
+        status: r.status,
+        notes: r.notes,
+      };
+    }),
   };
+}
+
+/**
+ * Single connection-friendly loader for /attendance.
+ * Loads members once, then day/month/range/session sequentially (safe with pooler).
+ */
+export async function getAttendancePageData(input: {
+  dateKey: string;
+  unit: Unit | "all";
+  year: number;
+  month: number;
+  fromKey: string;
+  toKey: string;
+}) {
+  return withDbRetry("getAttendancePageData", async () => {
+    const db = await readyPrisma();
+    const day = parseDateKey(input.dateKey);
+    const members = await loadMembers(input.unit);
+    const memberIds = members.map((m) => m.id);
+    const idFilter = idInFilter(memberIds);
+
+    const dayRecords = idFilter
+      ? await db.attendanceRecord.findMany({
+          where: { date: day, memberId: idFilter },
+          select: { memberId: true, status: true, notes: true },
+        })
+      : [];
+
+    const lifetime = idFilter
+      ? await db.attendanceRecord.groupBy({
+          by: ["memberId", "status"],
+          where: { memberId: idFilter },
+          _count: { _all: true },
+        })
+      : [];
+
+    const dayData = buildDayPayload(
+      input.dateKey,
+      day,
+      members,
+      dayRecords,
+      lifetime
+    );
+
+    const calendar = await getMonthCalendarSummary(
+      input.year,
+      input.month,
+      input.unit,
+      members
+    );
+    const rangeData = await getRangeReport(
+      input.fromKey,
+      input.toKey,
+      input.unit,
+      members
+    );
+    const session = await db.attendanceSession.findUnique({
+      where: { date: day },
+    });
+
+    const searchMembers = members.map((m) => ({
+      ...m,
+      dateOfBirth: m.dateOfBirth.toISOString(),
+    }));
+
+    return { calendar, dayData, rangeData, searchMembers, session };
+  });
 }

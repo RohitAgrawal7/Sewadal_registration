@@ -22,6 +22,7 @@ import { orgSettings } from "@/lib/org-settings";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { DbLoadError } from "@/components/ui/DbLoadError";
 import { AttendanceCalendar } from "./AttendanceCalendar";
 import { AttendanceEntryForm, AttendanceSessionDetails, type SearchMember } from "./AttendanceEntryForm";
 import { AttendanceMarkPanel } from "./AttendanceMarkPanel";
@@ -198,13 +199,10 @@ export function AttendanceClient({
   return (
     <div className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:py-10">
       {loadError && (
-        <div
-          role="alert"
-          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
-        >
-          <p className="font-semibold">Attendance data could not load</p>
-          <p className="mt-1 text-rose-800/90">{loadError}</p>
-        </div>
+        <DbLoadError
+          title="Attendance data could not load"
+          message={loadError}
+        />
       )}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
