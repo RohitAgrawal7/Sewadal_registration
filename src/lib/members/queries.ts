@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { readyPrisma } from "@/lib/prisma";
 import { withDerived, type MemberAttendanceStats } from "@/lib/dates";
 import type { Unit } from "@/lib/enums";
 import { MembershipStatus, UNITS, MEMBERSHIP_STATUSES } from "@/lib/enums";
@@ -10,7 +10,8 @@ function isUnit(value: string): value is Unit {
 }
 
 async function attendanceByMemberId() {
-  const grouped = await prisma.attendanceRecord.groupBy({
+  const db = await readyPrisma();
+  const grouped = await db.attendanceRecord.groupBy({
     by: ["memberId", "status"],
     _count: { _all: true },
   });
@@ -40,8 +41,9 @@ function withAttendance(member: Member, map: Map<number, { attended: number; abs
 }
 
 export async function getAllMembers() {
+  const db = await readyPrisma();
   const [members, attendanceMap] = await Promise.all([
-    prisma.member.findMany({
+    db.member.findMany({
       orderBy: { fullName: "asc" },
     }),
     attendanceByMemberId(),
@@ -53,7 +55,8 @@ export async function getMemberById(id: string | number) {
   const { parseMemberId } = await import("@/lib/members/ids");
   const numericId = parseMemberId(id);
   if (!numericId) return null;
-  const member = await prisma.member.findUnique({
+  const db = await readyPrisma();
+  const member = await db.member.findUnique({
     where: { id: numericId },
     include: {
       unitHistory: { orderBy: { startDate: "desc" } },
@@ -64,8 +67,9 @@ export async function getMemberById(id: string | number) {
 }
 
 export async function getDashboardStats() {
+  const db = await readyPrisma();
   const [members, attendanceMap] = await Promise.all([
-    prisma.member.findMany(),
+    db.member.findMany(),
     attendanceByMemberId(),
   ]);
   const now = new Date();

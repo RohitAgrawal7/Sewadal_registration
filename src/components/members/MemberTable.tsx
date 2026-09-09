@@ -174,9 +174,10 @@ export function MemberTable({
   }
 
   const filtered = useMemo(() => {
+    // Empty sewaRole = All roles (every member). Specific value filters that role only.
     let list = sewaRole
       ? members.filter((m) => normalizeSewaRole(m.sewaRole) === sewaRole)
-      : members.filter((m) => isSewadal(m.sewaRole));
+      : [...members];
 
     if (q.trim()) {
       const needle = q.trim().toLowerCase();
@@ -323,7 +324,7 @@ export function MemberTable({
     <section className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-          Sewadal
+          Members
         </h2>
         <p className="text-xs text-slate-400">
           {showAll || selectedUnit
@@ -462,7 +463,7 @@ export function MemberTable({
             Unit incharge &amp; office bearers
           </h3>
           <p className="text-xs text-slate-500">
-            Shown separately from the Sewadal list
+            Highlighted above the full member list
           </p>
         </div>
         <div className="divide-y divide-slate-100">
@@ -514,7 +515,9 @@ export function MemberTable({
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {filtered.length === 0 ? (
           <p className="px-4 py-10 text-center text-sm text-slate-500">
-            No members match these filters.
+            {members.length === 0
+              ? "No members registered yet. Use Register to add the first member."
+              : "No members match these filters. Clear Unit / Age / Role filters and try again."}
           </p>
         ) : (
           <>

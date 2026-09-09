@@ -1,5 +1,5 @@
 import { PrismaClient } from "@/generated/prisma";
-import { ensureDatabase } from "./ensure-database";
+import { clearDatabaseReady, ensureDatabase } from "./ensure-database";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -24,10 +24,10 @@ export function resolveDatabaseUrl(): string {
   return url;
 }
 
-function createPrismaClient() {
+function createPrismaClient(url: string) {
   return new PrismaClient({
     datasources: {
-      db: { url: resolveDatabaseUrl() },
+      db: { url },
     },
   });
 }
@@ -72,25 +72,43 @@ function getClient(): PrismaClient {
     void existing.$disconnect().catch(() => undefined);
     globalForPrisma.prisma = undefined;
     globalForPrisma.prismaReady = undefined;
+    if (globalForPrisma.prismaUrl) {
+      clearDatabaseReady(globalForPrisma.prismaUrl);
+    }
   }
 
-  const client = createPrismaClient();
+  const client = createPrismaClient(url);
   globalForPrisma.prisma = client;
   globalForPrisma.prismaUrl = url;
-  globalForPrisma.prismaReady = ensureDatabase(client);
+  globalForPrisma.prismaReady = ensureDatabase(client, url).catch((error) => {
+    globalForPrisma.prismaReady = undefined;
+    clearDatabaseReady(url);
+    throw error;
+  });
   return client;
 }
 
-/** Wait until schema checks finish. Call before transactions / first query in actions. */
+/** Wait until schema checks finish. Call before every server DB path. */
 export async function readyPrisma(): Promise<PrismaClient> {
   const client = getClient();
-  await (globalForPrisma.prismaReady ?? ensureDatabase(client));
+  const url = globalForPrisma.prismaUrl ?? resolveDatabaseUrl();
+  const ready =
+    globalForPrisma.prismaReady ?? ensureDatabase(client, url);
+  globalForPrisma.prismaReady = ready;
+  try {
+    await ready;
+  } catch (error) {
+    globalForPrisma.prismaReady = undefined;
+    clearDatabaseReady(url);
+    throw error;
+  }
   return client;
 }
 
 /**
  * Proxy keeps call sites using `prisma.x`, but does NOT wrap model methods
  * (wrapping breaks Prisma `$transaction([...])` which needs real PrismaPromises).
+ * Prefer `readyPrisma()` in server code so schema checks always complete first.
  */
 export const prisma = new Proxy({} as PrismaClient, {
   get(_target, prop, receiver) {

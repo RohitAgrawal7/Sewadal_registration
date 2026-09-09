@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/prisma";
+import { readyPrisma } from "@/lib/prisma";
 import { getAllMembers } from "@/lib/members/queries";
 import type { MemberWithDerived } from "@/lib/dates";
 import {
@@ -11,6 +11,7 @@ import {
 import { MembershipStatus } from "@/lib/enums";
 import { parseDateInput } from "@/lib/utils";
 import { parseMemberId } from "@/lib/members/ids";
+import type { PrismaClient } from "@/generated/prisma";
 
 function emptyToNull(value: string | undefined | null): string | null {
   if (value === undefined || value === null || value === "") return null;
@@ -54,11 +55,12 @@ function splitMemberWrite(data: MemberWriteData) {
 }
 
 async function applySewadaarColumns(
+  db: PrismaClient,
   id: number,
   extra: ReturnType<typeof splitMemberWrite>["extra"]
 ) {
   // Written with SQL so a stale webpack Prisma client still saves newer columns.
-  await prisma.$executeRaw`
+  await db.$executeRaw`
     UPDATE sewadal."Member"
     SET "sewaRole" = ${extra.sewaRole},
         "registryStatus" = ${extra.registryStatus},
@@ -195,7 +197,8 @@ export async function createMember(
   const { core, extra } = splitMemberWrite(data);
 
   try {
-    const member = await prisma.member.create({
+    const db = await readyPrisma();
+    const member = await db.member.create({
       data: {
         ...core,
         unitHistory: {
@@ -207,7 +210,7 @@ export async function createMember(
         },
       },
     });
-    await applySewadaarColumns(member.id, extra);
+    await applySewadaarColumns(db, member.id, extra);
 
     revalidateMemberCaches(member.id);
     return {
@@ -234,7 +237,8 @@ export async function updateMember(
     return { success: false, error: parsed.error.errors[0]?.message ?? "Invalid form" };
   }
 
-  const existing = await prisma.member.findUnique({
+  const db = await readyPrisma();
+  const existing = await db.member.findUnique({
     where: { id: numericId },
     include: { unitHistory: { where: { endDate: null }, take: 1 } },
   });
@@ -252,37 +256,36 @@ export async function updateMember(
   }
 
   try {
-    await prisma.$transaction(async (tx) => {
-      if (unitChanged) {
-        const currentLog = existing.unitHistory[0];
-        const endDate = data.unitAssignedDate;
-        if (currentLog) {
-          await tx.unitAssignmentLog.update({
-            where: { id: currentLog.id },
-            data: { endDate },
-          });
-        }
-        await tx.unitAssignmentLog.create({
-          data: {
-            memberId: numericId,
-            unit: data.unit,
-            startDate: data.unitAssignedDate,
-            endDate: null,
-          },
+    // Sequential writes (not interactive $transaction) so Supabase pooler / pgbouncer works.
+    if (unitChanged) {
+      const currentLog = existing.unitHistory[0];
+      const endDate = data.unitAssignedDate;
+      if (currentLog) {
+        await db.unitAssignmentLog.update({
+          where: { id: currentLog.id },
+          data: { endDate },
         });
       }
-
-      await tx.member.update({
-        where: { id: numericId },
+      await db.unitAssignmentLog.create({
         data: {
-          ...core,
-          unitAssignedDate: unitChanged
-            ? data.unitAssignedDate
-            : existing.unitAssignedDate,
+          memberId: numericId,
+          unit: data.unit,
+          startDate: data.unitAssignedDate,
+          endDate: null,
         },
       });
+    }
+
+    await db.member.update({
+      where: { id: numericId },
+      data: {
+        ...core,
+        unitAssignedDate: unitChanged
+          ? data.unitAssignedDate
+          : existing.unitAssignedDate,
+      },
     });
-    await applySewadaarColumns(numericId, extra);
+    await applySewadaarColumns(db, numericId, extra);
 
     revalidateMemberCaches(numericId);
     return { success: true, id: numericId };
@@ -296,10 +299,11 @@ export async function deactivateMember(id: string | number): Promise<ActionResul
   const numericId = parseMemberId(id);
   if (!numericId) return { success: false, error: "Member not found" };
 
-  const existing = await prisma.member.findUnique({ where: { id: numericId } });
+  const db = await readyPrisma();
+  const existing = await db.member.findUnique({ where: { id: numericId } });
   if (!existing) return { success: false, error: "Member not found" };
 
-  await prisma.member.update({
+  await db.member.update({
     where: { id: numericId },
     data: {
       membershipStatus: MembershipStatus.Inactive,
@@ -319,7 +323,8 @@ export async function reassignUnit(
   const numericId = parseMemberId(id);
   if (!numericId) return { success: false, error: "Member not found" };
 
-  const existing = await prisma.member.findUnique({
+  const db = await readyPrisma();
+  const existing = await db.member.findUnique({
     where: { id: numericId },
     include: { unitHistory: { where: { endDate: null }, take: 1 } },
   });
@@ -330,29 +335,28 @@ export async function reassignUnit(
 
   const assignedDate = parseDateInput(assignedDateIso);
 
-  await prisma.$transaction(async (tx) => {
-    const currentLog = existing.unitHistory[0];
-    if (currentLog) {
-      await tx.unitAssignmentLog.update({
-        where: { id: currentLog.id },
-        data: { endDate: assignedDate },
-      });
-    }
-    await tx.unitAssignmentLog.create({
-      data: {
-        memberId: numericId,
-        unit: newUnit,
-        startDate: assignedDate,
-        endDate: null,
-      },
+  // Sequential writes for pooler compatibility (see updateMember).
+  const currentLog = existing.unitHistory[0];
+  if (currentLog) {
+    await db.unitAssignmentLog.update({
+      where: { id: currentLog.id },
+      data: { endDate: assignedDate },
     });
-    await tx.member.update({
-      where: { id: numericId },
-      data: {
-        unit: newUnit,
-        unitAssignedDate: assignedDate,
-      },
-    });
+  }
+  await db.unitAssignmentLog.create({
+    data: {
+      memberId: numericId,
+      unit: newUnit,
+      startDate: assignedDate,
+      endDate: null,
+    },
+  });
+  await db.member.update({
+    where: { id: numericId },
+    data: {
+      unit: newUnit,
+      unitAssignedDate: assignedDate,
+    },
   });
 
   revalidateMemberCaches(numericId);

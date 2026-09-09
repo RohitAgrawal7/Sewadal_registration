@@ -74,6 +74,7 @@ export function AttendanceClient({
   rangeData,
   searchMembers,
   session,
+  loadError = null,
 }: {
   initialDateKey: string;
   unit: string;
@@ -83,6 +84,7 @@ export function AttendanceClient({
   dayData: DayPayload;
   rangeData: RangePayload;
   searchMembers: SearchMember[];
+  loadError?: string | null;
   session: {
     topic: string | null;
     sanchalanSewa: string | null;
@@ -195,6 +197,15 @@ export function AttendanceClient({
 
   return (
     <div className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:py-10">
+      {loadError && (
+        <div
+          role="alert"
+          className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
+        >
+          <p className="font-semibold">Attendance data could not load</p>
+          <p className="mt-1 text-rose-800/90">{loadError}</p>
+        </div>
+      )}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">

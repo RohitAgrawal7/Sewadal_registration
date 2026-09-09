@@ -87,29 +87,28 @@ export async function saveAttendanceForDate(
 
   try {
     const db = await readyPrisma();
-    await db.$transaction(async (tx) => {
-      for (const mark of marks) {
-        await tx.attendanceRecord.upsert({
-          where: {
-            memberId_date: {
-              memberId: mark.memberId,
-              date: day,
-            },
-          },
-          create: {
+    // Sequential upserts work with Supabase transaction pooler; interactive $transaction does not.
+    for (const mark of marks) {
+      await db.attendanceRecord.upsert({
+        where: {
+          memberId_date: {
             memberId: mark.memberId,
             date: day,
-            status: mark.status,
-            notes: mark.notes?.trim() || null,
           },
-          update: {
-            status: mark.status,
-            notes: mark.notes?.trim() || null,
-            markedAt: new Date(),
-          },
-        });
-      }
-    });
+        },
+        create: {
+          memberId: mark.memberId,
+          date: day,
+          status: mark.status,
+          notes: mark.notes?.trim() || null,
+        },
+        update: {
+          status: mark.status,
+          notes: mark.notes?.trim() || null,
+          markedAt: new Date(),
+        },
+      });
+    }
 
     softRevalidate("/attendance", "/");
     return { success: true };
@@ -242,58 +241,54 @@ export async function quickAddMemberAndMark(
 
   try {
     const db = await readyPrisma();
-    const created = await db.$transaction(async (tx) => {
-      const member = await tx.member.create({
-        data: {
-          fullName: name,
-          gender: input.gender,
-          dateOfBirth: dob,
-          nationalIdType: "Other",
-          email: `pending.${Date.now()}@local.registry`,
-          phonePrimary: phone,
-          address: addressLine,
-          city: addressLine.includes(",")
-            ? addressLine.split(",")[0]!.trim()
-            : "—",
-          stateRegion: addressLine.includes(",")
-            ? addressLine.split(",").slice(1).join(",").trim() || "—"
-            : "—",
-          country: orgSettings.defaultCountry,
-          unit: input.unit as Unit,
-          unitAssignedDate: day,
-          registrationDate: day,
-          membershipStatus: MembershipStatus.Active,
-          statusEffectiveDate: day,
-          sewaRole: "Sewadal",
-          registryStatus: "Registered",
-          unitHistory: {
-            create: {
-              unit: input.unit,
-              startDate: day,
-              endDate: null,
-            },
+    const member = await db.member.create({
+      data: {
+        fullName: name,
+        gender: input.gender,
+        dateOfBirth: dob,
+        nationalIdType: "Other",
+        email: `pending.${Date.now()}@local.registry`,
+        phonePrimary: phone,
+        address: addressLine,
+        city: addressLine.includes(",")
+          ? addressLine.split(",")[0]!.trim()
+          : "—",
+        stateRegion: addressLine.includes(",")
+          ? addressLine.split(",").slice(1).join(",").trim() || "—"
+          : "—",
+        country: orgSettings.defaultCountry,
+        unit: input.unit as Unit,
+        unitAssignedDate: day,
+        registrationDate: day,
+        membershipStatus: MembershipStatus.Active,
+        statusEffectiveDate: day,
+        sewaRole: "Sewadal",
+        registryStatus: "Registered",
+        unitHistory: {
+          create: {
+            unit: input.unit,
+            startDate: day,
+            endDate: null,
           },
         },
-      });
+      },
+    });
 
-      await tx.member.update({
-        where: { id: member.id },
-        data: { email: `member.${member.id}@local.registry` },
-      });
+    await db.member.update({
+      where: { id: member.id },
+      data: { email: `member.${member.id}@local.registry` },
+    });
 
-      await tx.attendanceRecord.create({
-        data: {
-          memberId: member.id,
-          date: day,
-          status,
-        },
-      });
-
-      return member;
+    await db.attendanceRecord.create({
+      data: {
+        memberId: member.id,
+        date: day,
+        status,
+      },
     });
 
     softRevalidate("/attendance", "/", ["/lists", "layout"]);
-    return { success: true, id: created.id, created: true };
+    return { success: true, id: member.id, created: true };
   } catch (e) {
     console.error("quickAddMemberAndMark failed", e);
     return { success: false, error: attendanceError(e, "Failed to add member") };

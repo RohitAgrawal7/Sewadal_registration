@@ -3,7 +3,10 @@
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { getUserForLogin } from "./ensure-user";
+import {
+  DatabaseUnavailableError,
+  getUserForLogin,
+} from "./ensure-user";
 import {
   SESSION_COOKIE,
   createSessionToken,
@@ -33,13 +36,6 @@ export async function loginAction(
 
   try {
     const user = await getUserForLogin(username);
-    if (!user) {
-      return {
-        error:
-          "Invalid username or password (or database is unavailable). Check DATABASE_URL on Vercel.",
-      };
-    }
-
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) {
       return { error: "Invalid username or password" };
@@ -53,10 +49,16 @@ export async function loginAction(
     redirect("/");
   } catch (error) {
     if (isNextRedirect(error)) throw error;
+    if (error instanceof DatabaseUnavailableError) {
+      return { error: error.message };
+    }
+    if (error instanceof Error && error.message === "INVALID_CREDENTIALS") {
+      return { error: "Invalid username or password" };
+    }
     console.error("loginAction failed", error);
     return {
       error:
-        "Could not sign in. Database may be unavailable — verify DATABASE_URL on Vercel and try again.",
+        "Could not sign in. Database may be unavailable — verify DATABASE_URL and try again.",
     };
   }
 }

@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@/generated/prisma";
 
-let readyPromise: Promise<void> | null = null;
+const readyByUrl = new Map<string, Promise<void>>();
 
 async function ensureRegistryStatusColumn(client: PrismaClient) {
   try {
@@ -16,14 +16,31 @@ async function ensureRegistryStatusColumn(client: PrismaClient) {
   }
 }
 
+async function verifyCoreTables(client: PrismaClient) {
+  await client.$queryRaw`SELECT 1 FROM sewadal."AppUser" LIMIT 1`;
+  await client.$queryRaw`SELECT 1 FROM sewadal."Member" LIMIT 1`;
+  await client.$queryRaw`SELECT 1 FROM sewadal."AttendanceRecord" LIMIT 1`;
+  await client.$queryRaw`SELECT 1 FROM sewadal."AttendanceSession" LIMIT 1`;
+}
+
+/** Drop cached readiness so the next call re-runs health checks (e.g. after client rebuild). */
+export function clearDatabaseReady(url?: string) {
+  if (url) readyByUrl.delete(url);
+  else readyByUrl.clear();
+}
+
 /** Light health check. Schema is applied with `prisma db push`. */
-export function ensureDatabase(client: PrismaClient): Promise<void> {
-  if (!readyPromise) {
-    readyPromise = (async () => {
+export function ensureDatabase(
+  client: PrismaClient,
+  url: string
+): Promise<void> {
+  let pending = readyByUrl.get(url);
+  if (!pending) {
+    pending = (async () => {
       await client.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS sewadal`);
       await client.$queryRaw`SELECT 1`;
       try {
-        await client.$queryRaw`SELECT 1 FROM sewadal."AppUser" LIMIT 1`;
+        await verifyCoreTables(client);
       } catch (error) {
         console.error(
           "Database tables missing in schema sewadal. Run locally: npx prisma db push",
@@ -33,9 +50,10 @@ export function ensureDatabase(client: PrismaClient): Promise<void> {
       }
       await ensureRegistryStatusColumn(client);
     })().catch((error) => {
-      readyPromise = null;
+      readyByUrl.delete(url);
       throw error;
     });
+    readyByUrl.set(url, pending);
   }
-  return readyPromise;
+  return pending;
 }

@@ -1,11 +1,4 @@
-import {
-  endOfDay,
-  endOfMonth,
-  parseISO,
-  startOfDay,
-  startOfMonth,
-} from "date-fns";
-import { prisma } from "@/lib/prisma";
+import { readyPrisma } from "@/lib/prisma";
 import { type Unit } from "@/lib/enums";
 import { UNITS } from "@/lib/enums";
 import type { AttendanceStatus } from "@/lib/enums";
@@ -17,22 +10,29 @@ import {
   type MemberAttendanceRow,
 } from "@/lib/attendance/stats";
 import { UNIT_LABELS } from "@/lib/unit-colors";
-import { dateKey, parseDateKey } from "@/lib/attendance/date-utils";
+import {
+  dateKey,
+  parseDateKey,
+  parseDateKeyEnd,
+  utcMonthBounds,
+} from "@/lib/attendance/date-utils";
 
 export { dateKey, parseDateKey } from "@/lib/attendance/date-utils";
 
+/** All members for attendance UI (includes Inactive; filter in the panel if needed). */
 export async function getActiveMembers(unit?: Unit | "all") {
-  const members = await prisma.member.findMany({
+  const db = await readyPrisma();
+  return db.member.findMany({
     where: {
       ...(unit && unit !== "all" ? { unit } : {}),
     },
     orderBy: [{ unit: "asc" }, { fullName: "asc" }],
   });
-  return members;
 }
 
 export async function getMembersForSearch() {
-  const members = await prisma.member.findMany({
+  const db = await readyPrisma();
+  const members = await db.member.findMany({
     select: {
       id: true,
       fullName: true,
@@ -58,23 +58,25 @@ export async function getMembersForSearch() {
 }
 
 export async function getAttendanceSession(dateKeyStr: string) {
+  const db = await readyPrisma();
   const day = parseDateKey(dateKeyStr);
-  return prisma.attendanceSession.findUnique({ where: { date: day } });
+  return db.attendanceSession.findUnique({ where: { date: day } });
 }
 
 export async function getAttendanceForDate(dateKeyStr: string, unit?: Unit | "all") {
+  const db = await readyPrisma();
   const day = parseDateKey(dateKeyStr);
   const members = await getActiveMembers(unit);
   const memberIds = members.map((m) => m.id);
   const emptyGuard = memberIds.length ? memberIds : [-1];
   const [records, lifetime] = await Promise.all([
-    prisma.attendanceRecord.findMany({
+    db.attendanceRecord.findMany({
       where: {
         date: day,
         memberId: { in: emptyGuard },
       },
     }),
-    prisma.attendanceRecord.groupBy({
+    db.attendanceRecord.groupBy({
       by: ["memberId", "status"],
       where: {
         memberId: { in: emptyGuard },
@@ -134,13 +136,13 @@ export async function getMonthCalendarSummary(
   month: number,
   unit?: Unit | "all"
 ) {
-  const monthStart = startOfMonth(new Date(year, month - 1, 1));
-  const monthEnd = endOfMonth(monthStart);
+  const db = await readyPrisma();
+  const { monthStart, monthEnd } = utcMonthBounds(year, month);
   const members = await getActiveMembers(unit);
   const memberIds = members.map((m) => m.id);
   const totalMembers = members.length;
 
-  const records = await prisma.attendanceRecord.findMany({
+  const records = await db.attendanceRecord.findMany({
     where: {
       date: { gte: monthStart, lte: monthEnd },
       memberId: { in: memberIds.length ? memberIds : [-1] },
@@ -194,11 +196,12 @@ export async function getRangeReport(
   toKey: string,
   unit?: Unit | "all"
 ) {
-  const from = startOfDay(parseISO(fromKey));
-  const to = endOfDay(parseISO(toKey));
+  const db = await readyPrisma();
+  const from = parseDateKey(fromKey);
+  const to = parseDateKeyEnd(toKey);
   const members = await getActiveMembers(unit);
 
-  const records = await prisma.attendanceRecord.findMany({
+  const records = await db.attendanceRecord.findMany({
     where: {
       date: { gte: from, lte: to },
       memberId: { in: members.map((m) => m.id) },

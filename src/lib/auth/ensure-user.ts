@@ -10,6 +10,13 @@ type UserRow = {
   passwordHash: string;
 };
 
+export class DatabaseUnavailableError extends Error {
+  constructor(message = "Database unavailable") {
+    super(message);
+    this.name = "DatabaseUnavailableError";
+  }
+}
+
 async function findUserByUsername(username: string): Promise<UserRow | null> {
   const db = await readyPrisma();
   return db.appUser.findUnique({ where: { username } });
@@ -50,12 +57,16 @@ export async function ensureDefaultUser(): Promise<UserRow | null> {
   }
 }
 
-export async function getUserForLogin(username: string) {
-  try {
-    await ensureDefaultUser();
-    return findUserByUsername(username);
-  } catch (error) {
-    console.error("getUserForLogin failed", error);
-    return null;
+export async function getUserForLogin(username: string): Promise<UserRow> {
+  const ensured = await ensureDefaultUser();
+  if (!ensured) {
+    throw new DatabaseUnavailableError(
+      "Database is unavailable. On Vercel, set DATABASE_URL to the Supabase pooler URI and redeploy."
+    );
   }
+  const user = await findUserByUsername(username);
+  if (!user) {
+    throw new Error("INVALID_CREDENTIALS");
+  }
+  return user;
 }
