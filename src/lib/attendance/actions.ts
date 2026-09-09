@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma } from "@/generated/prisma";
 import { readyPrisma } from "@/lib/prisma";
 import {
   AttendanceStatus,
@@ -74,6 +73,8 @@ export async function saveAttendanceForDate(
 
   const day = parseDateKey(dateKey);
 
+  // Dedupe by memberId (last mark wins) so 100+ UI submissions stay clean.
+  const byMember = new Map<number, AttendanceMarkInput>();
   for (const mark of marks) {
     if (!Number.isInteger(mark.memberId) || mark.memberId <= 0) {
       return { success: false, error: "Missing member id" };
@@ -81,37 +82,38 @@ export async function saveAttendanceForDate(
     if (!(ATTENDANCE_STATUSES as string[]).includes(mark.status)) {
       return { success: false, error: `Invalid status for member ${mark.memberId}` };
     }
+    byMember.set(mark.memberId, mark);
   }
+  const uniqueMarks = Array.from(byMember.values());
 
   try {
     const db = await readyPrisma();
-    // One SQL upsert batch per chunk — scales to 100+ marks without pool exhaustion.
-    const now = new Date();
-    for (const chunk of chunkArray(marks, WRITE_CHUNK)) {
-      const values = chunk.map(
-        (mark) =>
-          Prisma.sql`(
-            ${mark.memberId},
-            ${day},
-            ${mark.status},
-            ${mark.notes?.trim() || null},
-            ${now},
-            ${now}
-          )`
-      );
-      await withDbRetry("saveAttendanceChunk", () =>
-        db.$executeRaw`
-          INSERT INTO sewadal."AttendanceRecord"
-            ("memberId", "date", "status", "notes", "markedAt", "updatedAt")
-          VALUES ${Prisma.join(values)}
-          ON CONFLICT ("memberId", "date")
-          DO UPDATE SET
-            "status" = EXCLUDED."status",
-            "notes" = EXCLUDED."notes",
-            "markedAt" = EXCLUDED."markedAt",
-            "updatedAt" = EXCLUDED."updatedAt"
-        `
-      );
+    // Prisma upsert (not $executeRaw) — reliable with Supabase transaction pooler / pgbouncer.
+    // Chunked sequential writes stay within serverless time and connection_limit=1.
+    for (const chunk of chunkArray(uniqueMarks, WRITE_CHUNK)) {
+      await withDbRetry("saveAttendanceChunk", async () => {
+        for (const mark of chunk) {
+          await db.attendanceRecord.upsert({
+            where: {
+              memberId_date: {
+                memberId: mark.memberId,
+                date: day,
+              },
+            },
+            create: {
+              memberId: mark.memberId,
+              date: day,
+              status: mark.status,
+              notes: mark.notes?.trim() || null,
+            },
+            update: {
+              status: mark.status,
+              notes: mark.notes?.trim() || null,
+              markedAt: new Date(),
+            },
+          });
+        }
+      });
     }
 
     softRevalidate("/attendance", "/");
