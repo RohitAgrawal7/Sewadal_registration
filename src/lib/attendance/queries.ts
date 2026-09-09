@@ -354,8 +354,8 @@ export async function getRangeReport(
 }
 
 /**
- * Single connection-friendly loader for /attendance.
- * Loads members once, then day/month/range/session sequentially (safe with pooler).
+ * Fast initial /attendance loader: members + selected day + month calendar + session.
+ * Range report is loaded lazily when the user opens that panel.
  */
 export async function getAttendancePageData(input: {
   dateKey: string;
@@ -401,12 +401,7 @@ export async function getAttendancePageData(input: {
       input.unit,
       members
     );
-    const rangeData = await getRangeReport(
-      input.fromKey,
-      input.toKey,
-      input.unit,
-      members
-    );
+
     const session = await db.attendanceSession.findUnique({
       where: { date: day },
     });
@@ -416,6 +411,91 @@ export async function getAttendancePageData(input: {
       dateOfBirth: m.dateOfBirth.toISOString(),
     }));
 
+    // Placeholder — range is fetched on demand for faster first paint / date changes.
+    const rangeData = {
+      fromKey: input.fromKey,
+      toKey: input.toKey,
+      uniqueDates: [] as string[],
+      sessionCount: 0,
+      memberCount: members.length,
+      overall: summarizeStatuses([], members.length),
+      byUnit: (UNITS as Unit[]).map((u) => ({
+        unit: u,
+        label: UNIT_LABELS[u],
+        ...summarizeStatuses([], members.filter((m) => m.unit === u).length),
+      })),
+      memberStats: [] as Awaited<ReturnType<typeof getRangeReport>>["memberStats"],
+      detailRows: [] as Awaited<ReturnType<typeof getRangeReport>>["detailRows"],
+    };
+
     return { calendar, dayData, rangeData, searchMembers, session };
+  });
+}
+
+/** Light reload for date / unit / month changes (no range report). */
+export async function getAttendanceSlice(input: {
+  dateKey: string;
+  unit: Unit | "all";
+  year: number;
+  month: number;
+}) {
+  return withDbRetry("getAttendanceSlice", async () => {
+    const db = await readyPrisma();
+    const day = parseDateKey(input.dateKey);
+    const members = await loadMembers(input.unit);
+    const memberIds = members.map((m) => m.id);
+    const idFilter = idInFilter(memberIds);
+
+    const dayRecords = idFilter
+      ? await db.attendanceRecord.findMany({
+          where: { date: day, memberId: idFilter },
+          select: { memberId: true, status: true, notes: true },
+        })
+      : [];
+
+    const lifetime = idFilter
+      ? await db.attendanceRecord.groupBy({
+          by: ["memberId", "status"],
+          where: { memberId: idFilter },
+          _count: { _all: true },
+        })
+      : [];
+
+    const dayData = buildDayPayload(
+      input.dateKey,
+      day,
+      members,
+      dayRecords,
+      lifetime
+    );
+
+    const calendar = await getMonthCalendarSummary(
+      input.year,
+      input.month,
+      input.unit,
+      members
+    );
+
+    const session = await db.attendanceSession.findUnique({
+      where: { date: day },
+    });
+
+    return {
+      dayData,
+      dayMap: calendar.dayMap,
+      year: calendar.year,
+      month: calendar.month,
+      session: session
+        ? {
+            topic: session.topic,
+            sanchalanSewa: session.sanchalanSewa,
+            stageSewa: session.stageSewa,
+          }
+        : null,
+      searchMembers: members.map((m) => ({
+        ...m,
+        dateOfBirth: m.dateOfBirth.toISOString(),
+      })),
+    };
   });
 }

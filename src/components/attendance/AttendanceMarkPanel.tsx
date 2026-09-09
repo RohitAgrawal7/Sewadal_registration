@@ -63,6 +63,7 @@ export function AttendanceMarkPanel({
   returnTo,
   onSelectUnit,
   onRemoved,
+  onSaved,
 }: {
   dateKey: string;
   unitFilter: string;
@@ -73,6 +74,7 @@ export function AttendanceMarkPanel({
   returnTo?: string;
   onSelectUnit: (unit: string | null) => void;
   onRemoved?: (memberId: number) => void;
+  onSaved?: () => void;
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft>({});
@@ -88,6 +90,11 @@ export function AttendanceMarkPanel({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<PageSize>(20);
   const [pending, startTransition] = useTransition();
+
+  function afterMutation() {
+    if (onSaved) onSaved();
+    else router.refresh();
+  }
 
   useEffect(() => {
     const next: Draft = {};
@@ -162,7 +169,7 @@ export function AttendanceMarkPanel({
       const result = await saveAttendanceForDate(dateKey, marks);
       if (result.success) {
         toast.success("Attendance saved");
-        router.refresh();
+        afterMutation();
       } else toast.error(result.error);
     });
   }
@@ -181,7 +188,7 @@ export function AttendanceMarkPanel({
         setDraft(
           Object.fromEntries(rows.map((r) => [r.memberId, status])) as Draft
         );
-        router.refresh();
+        afterMutation();
       } else toast.error(result.error);
     });
   }
@@ -204,7 +211,11 @@ export function AttendanceMarkPanel({
         rate: r.rate ?? 0,
         status: AttendanceStatus.Present,
       })),
-    }).then(setPdfPreview);
+    })
+      .then(setPdfPreview)
+      .catch((error: Error) =>
+        toast.error(error.message || "Could not generate PDF")
+      );
   }
 
   function removePresent(memberId: number) {
@@ -217,7 +228,7 @@ export function AttendanceMarkPanel({
           ids.includes(memberId) ? ids : [...ids, memberId]
         );
         setRemoveId(null);
-        router.refresh();
+        afterMutation();
       } else toast.error(result.error);
     });
   }

@@ -1,6 +1,7 @@
 "use client";
 
-import type { jsPDF } from "jspdf";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import { format, parseISO } from "date-fns";
 import { orgSettings } from "@/lib/org-settings";
 import { UNIT_LABELS } from "@/lib/unit-colors";
@@ -105,21 +106,7 @@ function lastY(doc: jsPDF) {
     .finalY;
 }
 
-async function loadPdf() {
-  const [jspdfMod, autoTableMod] = await Promise.all([
-    import("jspdf"),
-    import("jspdf-autotable"),
-  ]);
-  const mod = jspdfMod as unknown as {
-    jsPDF?: new (options?: object) => jsPDF;
-    default: new (options?: object) => jsPDF;
-  };
-  const jsPDF = mod.jsPDF ?? mod.default;
-  return { jsPDF, autoTable: autoTableMod.default };
-}
-
-export async function buildAttendancePdf(data: AttendancePdfData) {
-  const { jsPDF, autoTable } = await loadPdf();
+export function buildAttendancePdf(data: AttendancePdfData) {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const margin = 14;
   let y = 16;
@@ -303,17 +290,26 @@ export async function buildAttendancePdf(data: AttendancePdfData) {
 export async function attendancePdfFile(
   data: AttendancePdfData
 ): Promise<AttendancePdfFile> {
-  const { doc, filename } = await buildAttendancePdf(data);
-  const blob = doc.output("blob");
-  return {
-    blob,
-    filename,
-    url: URL.createObjectURL(blob),
-  };
+  try {
+    const { doc, filename } = buildAttendancePdf(data);
+    const blob = doc.output("blob");
+    return {
+      blob,
+      filename,
+      url: URL.createObjectURL(blob),
+    };
+  } catch (error) {
+    console.error("attendancePdfFile failed", error);
+    throw new Error(
+      error instanceof Error
+        ? error.message
+        : "Could not generate PDF. Refresh and try again."
+    );
+  }
 }
 
 export async function downloadAttendancePdf(data: AttendancePdfData) {
-  const { doc, filename } = await buildAttendancePdf(data);
+  const { doc, filename } = buildAttendancePdf(data);
   doc.save(filename);
 }
 

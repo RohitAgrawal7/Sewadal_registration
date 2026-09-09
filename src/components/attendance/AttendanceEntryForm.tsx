@@ -147,10 +147,12 @@ export function AttendanceEntryForm({
   dateKey,
   members,
   onMarkedPresent,
+  skipRefresh = false,
 }: {
   dateKey: string;
   members: SearchMember[];
   onMarkedPresent?: (row: MemberAttendanceRow) => void;
+  skipRefresh?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -248,7 +250,7 @@ export function AttendanceEntryForm({
             });
           }
           resetPersonFields();
-          router.refresh();
+          if (!skipRefresh) router.refresh();
         } else toast.error(result.error);
         return;
       }
@@ -277,7 +279,7 @@ export function AttendanceEntryForm({
           });
         }
         resetPersonFields();
-        router.refresh();
+        if (!skipRefresh) router.refresh();
       } else toast.error(result.error);
     });
   }

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { format, parseISO, startOfMonth } from "date-fns";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import type { DaySummary } from "@/lib/attendance/stats";
 import type {
   GenderAttendanceBreakdown,
@@ -16,7 +17,7 @@ import {
 } from "@/lib/attendance/pdf";
 import { AttendancePdfPreview } from "./AttendancePdfPreview";
 import { formatPaRate } from "@/lib/attendance/stats";
-import { dateKey } from "@/lib/attendance/date-utils";
+import { todayKey } from "@/lib/attendance/date-utils";
 import { ALL_UNITS, UNIT_LABELS, unitChipStyle } from "@/lib/unit-colors";
 import { orgSettings } from "@/lib/org-settings";
 import { cn } from "@/lib/utils";
@@ -24,9 +25,17 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { DbLoadError } from "@/components/ui/DbLoadError";
 import { AttendanceCalendar } from "./AttendanceCalendar";
-import { AttendanceEntryForm, AttendanceSessionDetails, type SearchMember } from "./AttendanceEntryForm";
+import {
+  AttendanceEntryForm,
+  AttendanceSessionDetails,
+  type SearchMember,
+} from "./AttendanceEntryForm";
 import { AttendanceMarkPanel } from "./AttendanceMarkPanel";
 import { AttendanceSummaryCards } from "./AttendanceSummaryCards";
+import {
+  fetchAttendanceRangeAction,
+  fetchAttendanceSliceAction,
+} from "@/lib/attendance/actions";
 
 type DayPayload = {
   dateKey: string;
@@ -65,16 +74,32 @@ type RangePayload = {
   }>;
 };
 
+type SessionPayload = {
+  topic: string | null;
+  sanchalanSewa: string | null;
+  stageSewa: string | null;
+} | null;
+
+function syncUrl(pathname: string, patch: Record<string, string | null>) {
+  const params = new URLSearchParams(window.location.search);
+  for (const [k, v] of Object.entries(patch)) {
+    if (!v) params.delete(k);
+    else params.set(k, v);
+  }
+  const qs = params.toString();
+  window.history.replaceState(null, "", qs ? `${pathname}?${qs}` : pathname);
+}
+
 export function AttendanceClient({
   initialDateKey,
-  unit,
-  year,
-  month,
-  dayMap,
-  dayData,
-  rangeData,
-  searchMembers,
-  session,
+  unit: initialUnit,
+  year: initialYear,
+  month: initialMonth,
+  dayMap: initialDayMap,
+  dayData: initialDayData,
+  rangeData: initialRangeData,
+  searchMembers: initialSearchMembers,
+  session: initialSession,
   loadError = null,
 }: {
   initialDateKey: string;
@@ -86,33 +111,35 @@ export function AttendanceClient({
   rangeData: RangePayload;
   searchMembers: SearchMember[];
   loadError?: string | null;
-  session: {
-    topic: string | null;
-    sanchalanSewa: string | null;
-    stageSewa: string | null;
-  } | null;
+  session: SessionPayload;
 }) {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
-  const [fromKey, setFromKey] = useState(rangeData.fromKey);
-  const [toKey, setToKey] = useState(rangeData.toKey);
+
+  const [dateKey, setDateKey] = useState(initialDateKey);
+  const [unit, setUnit] = useState(initialUnit);
+  const [year, setYear] = useState(initialYear);
+  const [month, setMonth] = useState(initialMonth);
+  const [dayMap, setDayMap] = useState(initialDayMap);
+  const [dayData, setDayData] = useState(initialDayData);
+  const [rangeData, setRangeData] = useState(initialRangeData);
+  const [searchMembers, setSearchMembers] = useState(initialSearchMembers);
+  const [session, setSession] = useState(initialSession);
+  const [fromKey, setFromKey] = useState(initialRangeData.fromKey);
+  const [toKey, setToKey] = useState(initialRangeData.toKey);
   const [livePresent, setLivePresent] = useState<MemberAttendanceRow[]>([]);
   const [showRangeReport, setShowRangeReport] = useState(false);
+  const [rangeLoaded, setRangeLoaded] = useState(false);
   const [pdfPreview, setPdfPreview] = useState<AttendancePdfFile | null>(null);
+
   const returnTo = searchParams.toString()
     ? `${pathname}?${searchParams.toString()}`
     : pathname;
 
   useEffect(() => {
-    setFromKey(rangeData.fromKey);
-    setToKey(rangeData.toKey);
-  }, [rangeData.fromKey, rangeData.toKey]);
-
-  useEffect(() => {
     setLivePresent([]);
-  }, [initialDateKey]);
+  }, [dateKey]);
 
   useEffect(() => {
     const presentIds = new Set(
@@ -133,11 +160,50 @@ export function AttendanceClient({
     return Array.from(byId.values());
   }, [dayData.rows, livePresent]);
 
+  const loadSlice = useCallback(
+    (next: {
+      dateKey: string;
+      unit: string;
+      year: number;
+      month: number;
+    }) => {
+      startTransition(async () => {
+        const result = await fetchAttendanceSliceAction(next);
+        if (!result.success) {
+          toast.error(result.error);
+          return;
+        }
+        setDateKey(next.dateKey);
+        setUnit(next.unit);
+        setYear(result.data.year);
+        setMonth(result.data.month);
+        setDayMap(result.data.dayMap);
+        setDayData({
+          dateKey: result.data.dayData.dateKey,
+          rows: result.data.dayData.rows,
+          totals: result.data.dayData.totals,
+          byUnit: result.data.dayData.byUnit,
+          byGender: result.data.dayData.byGender,
+        });
+        setSession(result.data.session);
+        setSearchMembers(result.data.searchMembers);
+        setRangeLoaded(false);
+        syncUrl(pathname, {
+          date: next.dateKey,
+          unit: next.unit === "all" ? null : next.unit,
+          year: String(next.year),
+          month: String(next.month),
+        });
+      });
+    },
+    [pathname]
+  );
+
   function addPresentToList(row: MemberAttendanceRow) {
     const existing = dayData.rows.find((r) => r.memberId === row.memberId);
-    const attended = (existing?.attended ?? row.attended ?? 0) + (
-      existing?.status === "Present" ? 0 : 1
-    );
+    const attended =
+      (existing?.attended ?? row.attended ?? 0) +
+      (existing?.status === "Present" ? 0 : 1);
     const absentCount = existing?.absentCount ?? row.absentCount ?? 0;
     const sessions = attended + absentCount;
     const next: MemberAttendanceRow = {
@@ -151,6 +217,14 @@ export function AttendanceClient({
       const without = current.filter((r) => r.memberId !== next.memberId);
       return [...without, next];
     });
+    setDayData((current) => ({
+      ...current,
+      rows: current.rows.map((r) =>
+        r.memberId === next.memberId
+          ? { ...r, ...next, status: "Present" as const }
+          : r
+      ),
+    }));
     requestAnimationFrame(() => {
       document
         .getElementById("todays-present")
@@ -158,14 +232,26 @@ export function AttendanceClient({
     });
   }
 
-  function pushParams(patch: Record<string, string | null>) {
-    const params = new URLSearchParams(window.location.search);
-    for (const [k, v] of Object.entries(patch)) {
-      if (!v) params.delete(k);
-      else params.set(k, v);
-    }
-    startTransition(() => {
-      router.push(`${pathname}?${params.toString()}`);
+  function refreshCurrentSlice() {
+    loadSlice({ dateKey, unit, year, month });
+  }
+
+  async function loadRange(from = fromKey, to = toKey) {
+    startTransition(async () => {
+      const result = await fetchAttendanceRangeAction({
+        fromKey: from,
+        toKey: to,
+        unit,
+      });
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      setRangeData(result.data);
+      setFromKey(result.data.fromKey);
+      setToKey(result.data.toKey);
+      setRangeLoaded(true);
+      syncUrl(pathname, { from: result.data.fromKey, to: result.data.toKey });
     });
   }
 
@@ -193,7 +279,9 @@ export function AttendanceClient({
         absentCount: m.absentCount,
         rate: m.rate,
       })),
-    }).then(setPdfPreview);
+    })
+      .then(setPdfPreview)
+      .catch((error: Error) => toast.error(error.message || "PDF failed"));
   }
 
   return (
@@ -221,7 +309,7 @@ export function AttendanceClient({
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 scrollbar-thin sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
         <button
           type="button"
-          onClick={() => pushParams({ unit: null })}
+          onClick={() => loadSlice({ dateKey, unit: "all", year, month })}
           className={cn(
             "shrink-0 rounded-full border px-3 py-1.5 text-sm font-semibold transition",
             unit === "all"
@@ -237,7 +325,7 @@ export function AttendanceClient({
             <button
               key={u}
               type="button"
-              onClick={() => pushParams({ unit: u })}
+              onClick={() => loadSlice({ dateKey, unit: u, year, month })}
               style={unitChipStyle(u, active)}
               className="shrink-0 rounded-full border-2 px-3 py-1.5 text-sm font-semibold transition"
             >
@@ -252,27 +340,25 @@ export function AttendanceClient({
           <AttendanceCalendar
             year={year}
             month={month}
-            selectedDateKey={initialDateKey}
+            selectedDateKey={dateKey}
             dayMap={dayMap}
             onSelectDate={(key) => {
               const d = parseISO(key);
-              pushParams({
-                date: key,
-                year: String(d.getFullYear()),
-                month: String(d.getMonth() + 1),
+              loadSlice({
+                dateKey: key,
+                unit,
+                year: d.getFullYear(),
+                month: d.getMonth() + 1,
               });
             }}
             onChangeMonth={(y, m) => {
               const first = startOfMonth(new Date(y, m - 1, 1));
-              pushParams({
-                year: String(y),
-                month: String(m),
-                date: dateKey(first),
-              });
+              const key = todayKey(first);
+              loadSlice({ dateKey: key, unit, year: y, month: m });
             }}
           />
           <AttendanceSessionDetails
-            dateKey={initialDateKey}
+            dateKey={dateKey}
             year={year}
             month={month}
             session={session}
@@ -280,9 +366,10 @@ export function AttendanceClient({
         </div>
 
         <AttendanceEntryForm
-          dateKey={initialDateKey}
+          dateKey={dateKey}
           members={searchMembers}
           onMarkedPresent={addPresentToList}
+          skipRefresh
         />
       </div>
 
@@ -295,19 +382,35 @@ export function AttendanceClient({
         byGender={dayData.byGender}
         returnTo={returnTo}
         onSelectUnit={(next) =>
-          pushParams({ unit: next && next !== "all" ? next : null })
+          loadSlice({
+            dateKey,
+            unit: next && next !== "all" ? next : "all",
+            year,
+            month,
+          })
         }
-        onRemoved={(id) =>
+        onRemoved={(id) => {
           setLivePresent((current) =>
             current.filter((r) => r.memberId !== id)
-          )
-        }
+          );
+          setDayData((current) => ({
+            ...current,
+            rows: current.rows.map((r) =>
+              r.memberId === id ? { ...r, status: null } : r
+            ),
+          }));
+        }}
+        onSaved={refreshCurrentSlice}
       />
 
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <button
           type="button"
-          onClick={() => setShowRangeReport((open) => !open)}
+          onClick={() => {
+            const next = !showRangeReport;
+            setShowRangeReport(next);
+            if (next && !rangeLoaded) void loadRange();
+          }}
           className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left hover:bg-slate-50 sm:px-6"
           aria-expanded={showRangeReport}
         >
@@ -329,66 +432,75 @@ export function AttendanceClient({
 
         {showRangeReport && (
           <div className="space-y-4 border-t border-slate-100 px-4 py-4 sm:px-6 sm:pb-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-          <div className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:items-end">
-          <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-            From
-            <Input
-              type="date"
-              value={fromKey}
-              onChange={(e) => setFromKey(e.target.value)}
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-            To
-            <Input
-              type="date"
-              value={toKey}
-              onChange={(e) => setToKey(e.target.value)}
-            />
-          </label>
-          <Button
-            type="button"
-            className="w-full sm:w-auto"
-            onClick={() => pushParams({ from: fromKey, to: toKey })}
-          >
-            Apply range
-          </Button>
-        </div>
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full sm:w-auto"
-            onClick={previewRangePdf}
-          >
-            Preview range PDF
-          </Button>
-        </div>
-
-        <AttendanceSummaryCards
-          totals={rangeData.overall}
-          title={`Period totals · ${rangeData.sessionCount} session(s) · ${rangeData.memberCount} members`}
-        />
-
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {rangeData.byUnit.map((u) => (
-            <div
-              key={u.unit}
-              className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5"
-            >
-              <p className="text-sm font-semibold text-slate-800">{u.label}</p>
-              <p className="mt-1 text-xs tabular-nums text-slate-600">
-                {formatPaRate(u)}
-              </p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+              <div className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:items-end">
+                <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+                  From
+                  <Input
+                    type="date"
+                    value={fromKey}
+                    onChange={(e) => setFromKey(e.target.value)}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+                  To
+                  <Input
+                    type="date"
+                    value={toKey}
+                    onChange={(e) => setToKey(e.target.value)}
+                  />
+                </label>
+                <Button
+                  type="button"
+                  className="w-full sm:w-auto"
+                  onClick={() => void loadRange(fromKey, toKey)}
+                >
+                  Apply range
+                </Button>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full sm:w-auto"
+                disabled={!rangeLoaded}
+                onClick={previewRangePdf}
+              >
+                Preview range PDF
+              </Button>
             </div>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold">
-          <span className="text-slate-800">Total</span>
-          <span className="tabular-nums text-slate-700">
-            {formatPaRate(rangeData.overall)}
-          </span>
-        </div>
+
+            {!rangeLoaded ? (
+              <p className="text-sm text-slate-500">Loading range report…</p>
+            ) : (
+              <>
+                <AttendanceSummaryCards
+                  totals={rangeData.overall}
+                  title={`Period totals · ${rangeData.sessionCount} session(s) · ${rangeData.memberCount} members`}
+                />
+
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                  {rangeData.byUnit.map((u) => (
+                    <div
+                      key={u.unit}
+                      className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5"
+                    >
+                      <p className="text-sm font-semibold text-slate-800">
+                        {u.label}
+                      </p>
+                      <p className="mt-1 text-xs tabular-nums text-slate-600">
+                        {formatPaRate(u)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold">
+                  <span className="text-slate-800">Total</span>
+                  <span className="tabular-nums text-slate-700">
+                    {formatPaRate(rangeData.overall)}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
         )}
       </section>

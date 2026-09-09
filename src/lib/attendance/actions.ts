@@ -88,42 +88,75 @@ export async function saveAttendanceForDate(
 
   try {
     const db = await readyPrisma();
-    // Prisma upsert (not $executeRaw) — reliable with Supabase transaction pooler / pgbouncer.
-    // Chunked sequential writes stay within serverless time and connection_limit=1.
+    // Bulk upsert via parameterized SQL — fast for 100+ marks, works with pgbouncer.
     for (const chunk of chunkArray(uniqueMarks, WRITE_CHUNK)) {
       await withDbRetry("saveAttendanceChunk", async () => {
-        for (const mark of chunk) {
-          await db.attendanceRecord.upsert({
-            where: {
-              memberId_date: {
-                memberId: mark.memberId,
-                date: day,
-              },
-            },
-            create: {
-              memberId: mark.memberId,
-              date: day,
-              status: mark.status,
-              notes: mark.notes?.trim() || null,
-            },
-            update: {
-              status: mark.status,
-              notes: mark.notes?.trim() || null,
-              markedAt: new Date(),
-            },
-          });
-        }
+        const params: unknown[] = [];
+        const valueSql = chunk
+          .map((mark, i) => {
+            const b = i * 4;
+            params.push(
+              mark.memberId,
+              day,
+              mark.status,
+              mark.notes?.trim() || null
+            );
+            return `($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, NOW(), NOW())`;
+          })
+          .join(", ");
+
+        await db.$executeRawUnsafe(
+          `
+          INSERT INTO sewadal."AttendanceRecord"
+            ("memberId", "date", "status", "notes", "markedAt", "updatedAt")
+          VALUES ${valueSql}
+          ON CONFLICT ("memberId", "date")
+          DO UPDATE SET
+            "status" = EXCLUDED."status",
+            "notes" = EXCLUDED."notes",
+            "markedAt" = NOW(),
+            "updatedAt" = NOW()
+          `,
+          ...params
+        );
       });
     }
 
-    softRevalidate("/attendance", "/");
+    // Soft cache hint only — clients update UI locally for speed.
+    softRevalidate("/attendance");
     return { success: true };
   } catch (e) {
     console.error("saveAttendanceForDate failed", e);
-    return {
-      success: false,
-      error: attendanceError(e, "Failed to save attendance"),
-    };
+    // Fallback: sequential Prisma upserts if raw SQL fails for any reason.
+    try {
+      const db = await readyPrisma();
+      for (const mark of uniqueMarks) {
+        await db.attendanceRecord.upsert({
+          where: {
+            memberId_date: { memberId: mark.memberId, date: day },
+          },
+          create: {
+            memberId: mark.memberId,
+            date: day,
+            status: mark.status,
+            notes: mark.notes?.trim() || null,
+          },
+          update: {
+            status: mark.status,
+            notes: mark.notes?.trim() || null,
+            markedAt: new Date(),
+          },
+        });
+      }
+      softRevalidate("/attendance");
+      return { success: true };
+    } catch (fallbackError) {
+      console.error("saveAttendanceForDate fallback failed", fallbackError);
+      return {
+        success: false,
+        error: attendanceError(fallbackError, "Failed to save attendance"),
+      };
+    }
   }
 }
 
@@ -301,5 +334,77 @@ export async function quickAddMemberAndMark(
   } catch (e) {
     console.error("quickAddMemberAndMark failed", e);
     return { success: false, error: attendanceError(e, "Failed to add member") };
+  }
+}
+
+export async function fetchAttendanceSliceAction(input: {
+  dateKey: string;
+  unit: string;
+  year: number;
+  month: number;
+}) {
+  try {
+    if (!input.dateKey || !/^\d{4}-\d{2}-\d{2}$/.test(input.dateKey)) {
+      return { success: false as const, error: "Invalid date" };
+    }
+    const unit =
+      input.unit && (UNITS as string[]).includes(input.unit)
+        ? (input.unit as Unit)
+        : "all";
+    const { getAttendanceSlice } = await import("@/lib/attendance/queries");
+    const data = await getAttendanceSlice({
+      dateKey: input.dateKey,
+      unit,
+      year: input.year,
+      month: input.month,
+    });
+    return { success: true as const, data };
+  } catch (e) {
+    console.error("fetchAttendanceSliceAction failed", e);
+    return {
+      success: false as const,
+      error: attendanceError(e, "Could not load attendance for that date"),
+    };
+  }
+}
+
+export async function fetchAttendanceRangeAction(input: {
+  fromKey: string;
+  toKey: string;
+  unit: string;
+}) {
+  try {
+    if (
+      !input.fromKey ||
+      !input.toKey ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(input.fromKey) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(input.toKey)
+    ) {
+      return { success: false as const, error: "Invalid date range" };
+    }
+    const unit =
+      input.unit && (UNITS as string[]).includes(input.unit)
+        ? (input.unit as Unit)
+        : "all";
+    const { getRangeReport } = await import("@/lib/attendance/queries");
+    const data = await getRangeReport(input.fromKey, input.toKey, unit);
+    return {
+      success: true as const,
+      data: {
+        fromKey: data.fromKey,
+        toKey: data.toKey,
+        sessionCount: data.sessionCount,
+        memberCount: data.memberCount,
+        overall: data.overall,
+        byUnit: data.byUnit,
+        memberStats: data.memberStats,
+      },
+    };
+  } catch (e) {
+    console.error("fetchAttendanceRangeAction failed", e);
+    return {
+      success: false as const,
+      error: attendanceError(e, "Could not load range report"),
+    };
   }
 }
