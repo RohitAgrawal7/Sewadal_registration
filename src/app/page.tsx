@@ -24,6 +24,7 @@ export default async function DashboardPage() {
     active: 0,
     byUnit: { ...EMPTY_BY_UNIT },
     newThisMonth: 0,
+    totalSessions: 0,
     members: [],
   };
 

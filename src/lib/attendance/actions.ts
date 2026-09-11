@@ -122,6 +122,13 @@ export async function saveAttendanceForDate(
       });
     }
 
+    // Register this date as a shared attendance session for all members.
+    await db.attendanceSession.upsert({
+      where: { date: day },
+      create: { date: day },
+      update: {},
+    });
+
     // Soft cache hint only — clients update UI locally for speed.
     softRevalidate("/attendance");
     return { success: true };
@@ -148,6 +155,11 @@ export async function saveAttendanceForDate(
           },
         });
       }
+      await db.attendanceSession.upsert({
+        where: { date: day },
+        create: { date: day },
+        update: {},
+      });
       softRevalidate("/attendance");
       return { success: true };
     } catch (fallbackError) {
@@ -327,6 +339,12 @@ export async function quickAddMemberAndMark(
         date: day,
         status,
       },
+    });
+
+    await db.attendanceSession.upsert({
+      where: { date: day },
+      create: { date: day },
+      update: {},
     });
 
     softRevalidate("/attendance", "/", ["/lists", "layout"]);

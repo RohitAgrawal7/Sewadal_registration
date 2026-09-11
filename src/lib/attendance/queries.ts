@@ -18,6 +18,10 @@ import {
   utcMonthBounds,
 } from "@/lib/attendance/date-utils";
 import { idInFilter, withDbRetry } from "@/lib/db/helpers";
+import {
+  computeSharedSessionStats,
+  emptyMemberSessionStats,
+} from "@/lib/attendance/session-stats";
 
 export { dateKey, parseDateKey } from "@/lib/attendance/date-utils";
 
@@ -78,24 +82,15 @@ function buildDayPayload(
   day: Date,
   members: MemberListRow[],
   records: Array<{ memberId: number; status: string; notes: string | null }>,
-  lifetime: Array<{ memberId: number; status: string; _count: { _all: number } }>
+  sessionStats: Map<number, ReturnType<typeof emptyMemberSessionStats>>,
+  totalSessions: number
 ) {
   const byMember = new Map(records.map((r) => [r.memberId, r]));
-  const lifetimeMap = new Map<number, { attended: number; absent: number }>();
-  for (const row of lifetime) {
-    const cur = lifetimeMap.get(row.memberId) ?? { attended: 0, absent: 0 };
-    if (row.status === "Present" || row.status === "Late") {
-      cur.attended += row._count._all;
-    } else if (row.status === "Absent") {
-      cur.absent += row._count._all;
-    }
-    lifetimeMap.set(row.memberId, cur);
-  }
 
   const rows: MemberAttendanceRow[] = members.map((m) => {
     const rec = byMember.get(m.id);
-    const life = lifetimeMap.get(m.id) ?? { attended: 0, absent: 0 };
-    const sessions = life.attended + life.absent;
+    const life =
+      sessionStats.get(m.id) ?? emptyMemberSessionStats(totalSessions);
     return {
       memberId: m.id,
       fullName: m.fullName,
@@ -105,10 +100,10 @@ function buildDayPayload(
       registryStatus: m.registryStatus,
       status: (rec?.status as AttendanceStatus) ?? null,
       notes: rec?.notes ?? null,
-      sessions,
+      sessions: life.sessions,
       attended: life.attended,
-      absentCount: life.absent,
-      rate: sessions > 0 ? Math.round((life.attended / sessions) * 1000) / 10 : 0,
+      absentCount: life.absentCount,
+      rate: life.rate,
     };
   });
 
@@ -124,6 +119,7 @@ function buildDayPayload(
     totals,
     byUnit: groupByUnit(rows),
     byGender: groupByGender(rows),
+    totalSessions,
   };
 }
 
@@ -146,17 +142,18 @@ export async function getAttendanceForDate(
       )
     : [];
 
-  const lifetime = idFilter
-    ? await withDbRetry("lifetimeStats", () =>
-        db.attendanceRecord.groupBy({
-          by: ["memberId", "status"],
-          where: { memberId: idFilter },
-          _count: { _all: true },
-        })
-      )
-    : [];
+  const { totalSessions, byMember } = await withDbRetry("sharedSessionStats", () =>
+    computeSharedSessionStats(db, memberIds)
+  );
 
-  return buildDayPayload(dateKeyStr, day, members, records, lifetime);
+  return buildDayPayload(
+    dateKeyStr,
+    day,
+    members,
+    records,
+    byMember,
+    totalSessions
+  );
 }
 
 export async function getMonthCalendarSummary(
@@ -260,6 +257,11 @@ export async function getRangeReport(
       )
     : [];
 
+  const uniqueDates = Array.from(
+    new Set(records.map((r) => dateKey(r.date)))
+  ).sort();
+  const rangeSessions = uniqueDates.length;
+
   const byMemberId = new Map<number, typeof records>();
   for (const r of records) {
     const list = byMemberId.get(r.memberId);
@@ -271,39 +273,50 @@ export async function getRangeReport(
 
   const memberStats = members.map((m) => {
     const mine = byMemberId.get(m.id) ?? [];
-    const totals = summarizeStatuses(
-      mine.map((r) => r.status as AttendanceStatus),
-      undefined
-    );
-    const sessions = totals.present + totals.absent;
+    let attended = 0;
+    let late = 0;
+    let excused = 0;
+    let present = 0;
+    let absentMarked = 0;
+    for (const r of mine) {
+      if (r.status === "Present") {
+        present += 1;
+        attended += 1;
+      } else if (r.status === "Late") {
+        late += 1;
+        attended += 1;
+      } else if (r.status === "Absent") {
+        absentMarked += 1;
+      } else if (r.status === "Excused") {
+        excused += 1;
+      }
+    }
+    attended = Math.min(attended, rangeSessions);
+    const absentCount = Math.max(0, rangeSessions - attended);
     return {
       memberId: m.id,
       fullName: m.fullName,
       unit: m.unit,
       gender: m.gender,
-      present: totals.present,
-      absent: totals.absent,
-      late: totals.late,
-      excused: totals.excused,
-      recorded: totals.recorded,
-      sessions,
-      attended: totals.present,
-      absentCount: totals.absent,
+      present,
+      absent: absentCount,
+      late,
+      excused,
+      recorded: present + absentMarked + late + excused,
+      sessions: rangeSessions,
+      attended,
+      absentCount,
       rate:
-        sessions > 0
-          ? Math.round((totals.present / sessions) * 1000) / 10
+        rangeSessions > 0
+          ? Math.round((attended / rangeSessions) * 1000) / 10
           : 0,
     };
   });
 
-  const uniqueDates = Array.from(
-    new Set(records.map((r) => dateKey(r.date)))
-  ).sort();
-
   const overall = summarizeStatuses(
     records.map((r) => r.status as AttendanceStatus)
   );
-  overall.expected = members.length * uniqueDates.length;
+  overall.expected = members.length * rangeSessions;
   overall.unmarked = Math.max(0, overall.expected - overall.recorded);
   overall.rate =
     overall.expected > 0
@@ -318,7 +331,7 @@ export async function getRangeReport(
     const t = summarizeStatuses(
       unitRecords.map((r) => r.status as AttendanceStatus)
     );
-    t.expected = unitMembers.length * uniqueDates.length;
+    t.expected = unitMembers.length * rangeSessions;
     t.unmarked = Math.max(0, t.expected - t.recorded);
     t.rate =
       t.expected > 0
@@ -379,20 +392,18 @@ export async function getAttendancePageData(input: {
         })
       : [];
 
-    const lifetime = idFilter
-      ? await db.attendanceRecord.groupBy({
-          by: ["memberId", "status"],
-          where: { memberId: idFilter },
-          _count: { _all: true },
-        })
-      : [];
+    const { totalSessions, byMember } = await computeSharedSessionStats(
+      db,
+      memberIds
+    );
 
     const dayData = buildDayPayload(
       input.dateKey,
       day,
       members,
       dayRecords,
-      lifetime
+      byMember,
+      totalSessions
     );
 
     const calendar = await getMonthCalendarSummary(
@@ -453,20 +464,18 @@ export async function getAttendanceSlice(input: {
         })
       : [];
 
-    const lifetime = idFilter
-      ? await db.attendanceRecord.groupBy({
-          by: ["memberId", "status"],
-          where: { memberId: idFilter },
-          _count: { _all: true },
-        })
-      : [];
+    const { totalSessions, byMember } = await computeSharedSessionStats(
+      db,
+      memberIds
+    );
 
     const dayData = buildDayPayload(
       input.dateKey,
       day,
       members,
       dayRecords,
-      lifetime
+      byMember,
+      totalSessions
     );
 
     const calendar = await getMonthCalendarSummary(

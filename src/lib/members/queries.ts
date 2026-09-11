@@ -5,42 +5,27 @@ import { MembershipStatus, UNITS, MEMBERSHIP_STATUSES } from "@/lib/enums";
 import { startOfMonth, endOfMonth } from "date-fns";
 import type { Member } from "@/generated/prisma";
 import { withDbRetry } from "@/lib/db/helpers";
+import { computeSharedSessionStats } from "@/lib/attendance/session-stats";
 
 function isUnit(value: string): value is Unit {
   return (UNITS as string[]).includes(value);
 }
 
-async function attendanceByMemberId(
-  db: Awaited<ReturnType<typeof readyPrisma>>
-) {
-  const grouped = await db.attendanceRecord.groupBy({
-    by: ["memberId", "status"],
-    _count: { _all: true },
-  });
-  const map = new Map<number, { attended: number; absent: number }>();
-  for (const row of grouped) {
-    const cur = map.get(row.memberId) ?? { attended: 0, absent: 0 };
-    if (row.status === "Present" || row.status === "Late") {
-      cur.attended += row._count._all;
-    } else if (row.status === "Absent") {
-      cur.absent += row._count._all;
-    }
-    map.set(row.memberId, cur);
-  }
-  return map;
-}
-
 function withAttendance(
   member: Member,
-  map: Map<number, { attended: number; absent: number }>
+  stats: { attended: number; absentCount: number; sessions: number; rate: number } | undefined,
+  totalSessions: number
 ) {
-  const c = map.get(member.id) ?? { attended: 0, absent: 0 };
-  const recorded = c.attended + c.absent;
+  const attended = stats?.attended ?? 0;
+  const absent = stats?.absentCount ?? totalSessions;
+  const recorded = totalSessions;
   const attendance: MemberAttendanceStats = {
-    attended: c.attended,
-    absent: c.absent,
+    attended,
+    absent,
     recorded,
-    rate: recorded > 0 ? Math.round((c.attended / recorded) * 1000) / 10 : 0,
+    rate:
+      stats?.rate ??
+      (recorded > 0 ? Math.round((attended / recorded) * 1000) / 10 : 0),
   };
   return { ...withDerived(member), attendance };
 }
@@ -48,12 +33,16 @@ function withAttendance(
 export async function getAllMembers() {
   return withDbRetry("getAllMembers", async () => {
     const db = await readyPrisma();
-    // Sequential: one pooler connection — avoids stampedes with 100+ members.
     const members = await db.member.findMany({
       orderBy: { fullName: "asc" },
     });
-    const attendanceMap = await attendanceByMemberId(db);
-    return members.map((m) => withAttendance(m, attendanceMap));
+    const { totalSessions, byMember } = await computeSharedSessionStats(
+      db,
+      members.map((m) => m.id)
+    );
+    return members.map((m) =>
+      withAttendance(m, byMember.get(m.id), totalSessions)
+    );
   });
 }
 
@@ -80,7 +69,10 @@ export async function getDashboardStats() {
     const members = await db.member.findMany({
       orderBy: { fullName: "asc" },
     });
-    const attendanceMap = await attendanceByMemberId(db);
+    const { totalSessions, byMember } = await computeSharedSessionStats(
+      db,
+      members.map((m) => m.id)
+    );
     const now = new Date();
     const monthStart = startOfMonth(now);
     const monthEnd = endOfMonth(now);
@@ -108,7 +100,10 @@ export async function getDashboardStats() {
       active,
       byUnit,
       newThisMonth,
-      members: members.map((m) => withAttendance(m, attendanceMap)),
+      totalSessions,
+      members: members.map((m) =>
+        withAttendance(m, byMember.get(m.id), totalSessions)
+      ),
     };
   });
 }

@@ -201,17 +201,20 @@ export function AttendanceClient({
 
   function addPresentToList(row: MemberAttendanceRow) {
     const existing = dayData.rows.find((r) => r.memberId === row.memberId);
-    const attended =
-      (existing?.attended ?? row.attended ?? 0) +
-      (existing?.status === "Present" ? 0 : 1);
-    const absentCount = existing?.absentCount ?? row.absentCount ?? 0;
-    const sessions = attended + absentCount;
+    const sessions = existing?.sessions ?? row.sessions ?? 0;
+    const alreadyPresent = existing?.status === "Present";
+    const attended = Math.min(
+      sessions,
+      (existing?.attended ?? row.attended ?? 0) + (alreadyPresent ? 0 : 1)
+    );
+    const absentCount = Math.max(0, sessions - attended);
     const next: MemberAttendanceRow = {
       ...row,
       sessions,
       attended,
       absentCount,
       rate: sessions > 0 ? Math.round((attended / sessions) * 1000) / 10 : 0,
+      status: "Present",
     };
     setLivePresent((current) => {
       const without = current.filter((r) => r.memberId !== next.memberId);
@@ -220,9 +223,7 @@ export function AttendanceClient({
     setDayData((current) => ({
       ...current,
       rows: current.rows.map((r) =>
-        r.memberId === next.memberId
-          ? { ...r, ...next, status: "Present" as const }
-          : r
+        r.memberId === next.memberId ? { ...r, ...next } : r
       ),
     }));
     requestAnimationFrame(() => {

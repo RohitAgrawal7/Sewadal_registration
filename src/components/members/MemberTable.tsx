@@ -252,15 +252,18 @@ export function MemberTable({
   const listTotals = useMemo(() => {
     let attended = 0;
     let absent = 0;
+    let sessions = 0;
     for (const m of filtered) {
       const a = m.attendance ?? EMPTY_ATTENDANCE;
       attended += a.attended;
       absent += a.absent;
+      // recorded = shared total sessions (same for every member)
+      sessions = Math.max(sessions, a.recorded);
     }
-    const recorded = attended + absent;
+    const expected = sessions * filtered.length;
     const rate =
-      recorded > 0 ? Math.round((attended / recorded) * 1000) / 10 : 0;
-    return { attended, absent, sessions: recorded, rate };
+      expected > 0 ? Math.round((attended / expected) * 1000) / 10 : 0;
+    return { attended, absent, sessions, rate };
   }, [filtered]);
 
   const paged = useMemo(

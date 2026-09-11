@@ -111,6 +111,7 @@ export default async function AttendancePage({
       totals: EMPTY_TOTALS,
       byUnit: [],
       byGender: [],
+      totalSessions: 0,
     };
     rangeData = {
       fromKey: from,
